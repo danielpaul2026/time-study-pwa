@@ -1,21 +1,16 @@
+import { useNavigate } from "react-router-dom";
+
 export default function Menu() {
+    const navigate = useNavigate();
+
     const templates = [
-        { id: 1, name: "NPPC General"},
-        { id: 2, name: "Orgill Mez"}
-        ];
+        { id: 1, name: "NPPC General" },
+        { id: 2, name: "Orgill Mez" }
+    ];
 
-    const listTemplates = templates.map(templates =>
-        <li
-        key = {templates.id}
-        >
-            {templates.name}
-            <TemplateActionBar></TemplateActionBar>
-        </li>
-    )
-
-    function DirectButton({ page, children}) {
+    function DirectButton({ page, children }) {
         return (
-            <button onClick={() => alert(page)}>
+            <button onClick={() => navigate(`/${page}`)}>
                 {children}
             </button>
         );
@@ -24,17 +19,23 @@ export default function Menu() {
     function TemplateActionBar() {
         return (
             <div>
-            <DirectButton page="Study">Take Study</DirectButton>
-            <DirectButton page="ConfigTemplate">Edit Template</DirectButton>
-            <DirectButton page="Results">See Study</DirectButton>
+                <DirectButton page="Study">Take Study</DirectButton>
+                <DirectButton page="Results">See Study</DirectButton>
             </div>
         );
     }
 
-  return (
-    <>
-    <h1>Study Templates (Count: {listTemplates.length})</h1>
-    <ul>{listTemplates}</ul>
-    </>
-  );
+    const listTemplates = templates.map(template => (
+        <li key={template.id}>
+            {template.name}
+            <TemplateActionBar />
+        </li>
+    ));
+
+    return (
+        <>
+            <h1>Study Templates (Count: {listTemplates.length})</h1>
+            <ul>{listTemplates}</ul>
+        </>
+    );
 }
