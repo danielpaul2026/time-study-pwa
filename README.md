@@ -1,1 +1,3 @@
 # time-study-pwa
+
+I have no clue what I am doing...
