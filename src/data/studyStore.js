@@ -31,8 +31,32 @@ export function getStudySessions() {
   return readList(SESSION_STORAGE_KEY);
 }
 
+export function getStudySubjects(templateId) {
+  return Array.from({ length: 10 }, (_, index) => {
+    const number = index + 1;
+    return {
+      id: `${templateId}:${number}`,
+      templateId,
+      number
+    };
+  });
+}
+
 export function saveStudySession(session) {
   const sessions = getStudySessions();
   sessions.unshift(session);
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+}
+
+export function clearStudyData(templateId) {
+  const sessions = getStudySessions().filter(session => session.templateId !== templateId);
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+}
+
+export function clearStudySubjectData(templateId, subjectNumber) {
+  const sessions = getStudySessions().filter(session =>
+    session.templateId !== templateId ||
+    (Number.isInteger(session.subjectNumber) ? session.subjectNumber : 1) !== subjectNumber
+  );
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
 }

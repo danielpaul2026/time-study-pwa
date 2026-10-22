@@ -4,5 +4,9 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 
 ## Features
 - simplified menu
-- elements on a template can be reordered
+- configurable template grid columns and row height
+- buttons can be dragged between dotted grid cells, leaving cells empty
+- ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data
+- the study preview and results show a subject's previous runs, with a gap marker when recording resumes
+- results display one template and subject at a time, with separate subject- and template-scoped clearing
 - more style options
