@@ -48,6 +48,18 @@ export function saveStudySession(session) {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
 }
 
+export function updateStudySessionEvent(sessionId, eventIndex, changes) {
+  const sessions = getStudySessions();
+  const session = sessions.find(item => item.id === sessionId);
+  if (!session || !Array.isArray(session.events) || !session.events[eventIndex]) {
+    return false;
+  }
+
+  session.events[eventIndex] = { ...session.events[eventIndex], ...changes };
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+  return true;
+}
+
 export function clearStudyData(templateId) {
   const sessions = getStudySessions().filter(session => session.templateId !== templateId);
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));

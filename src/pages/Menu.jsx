@@ -148,6 +148,14 @@ export default function Menu() {
                     <button type="button" onClick={() => navigate("/Template")}>New</button>
                     <button
                         type="button"
+                        onClick={() => navigate(selectedTemplate
+                            ? `/Results?templateId=${encodeURIComponent(selectedTemplate.id)}`
+                            : "/Results")}
+                    >
+                        Results
+                    </button>
+                    <button
+                        type="button"
                         disabled={!selectedTemplate}
                         onClick={() => navigate(`/Template/${encodeURIComponent(selectedTemplate.id)}`)}
                     >

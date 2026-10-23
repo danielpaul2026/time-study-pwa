@@ -1,19 +1,20 @@
-import { useEffect, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   getStudySessions,
   getStudySubjects,
   getTemplates,
-  saveStudySession
+  saveStudySession,
+  saveTemplate,
+  updateStudySessionEvent
 } from "../data/studyStore";
 import useAvailableGridRows from "../hooks/useAvailableGridRows";
 
 export default function Study() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [ searchParams ] = useSearchParams();
   const templateId = searchParams.get("templateId");
-  const [ template ] = useState(() =>
+  const [ template, setTemplate ] = useState(() =>
     getTemplates().find(item => item.id === templateId)
   );
   const subjects = templateId ? getStudySubjects(templateId) : [];
@@ -21,12 +22,15 @@ export default function Study() {
     String(Math.max(1, Math.min(10, Number(searchParams.get("subjectNumber")) || subjects[0]?.number || 1)))
   );
   const [ timestamp, setTimestamp ] = useState(null);
-  const [ duration, setDuration ] = useState(null);
   const [ actionEvents, setActionEvents ] = useState([]);
   const [ clockNow, setClockNow ] = useState(0);
   const [ studySessions, setStudySessions ] = useState(() => getStudySessions());
   const [ nestedParent, setNestedParent ] = useState(null);
   const [ noteEditor, setNoteEditor ] = useState(null);
+  const [ selectedEventTarget, setSelectedEventTarget ] = useState(null);
+  const [ isAddingElement, setIsAddingElement ] = useState(false);
+  const [ newElementName, setNewElementName ] = useState("");
+  const observationLogRef = useRef(null);
 
   useEffect(() => {
     if (timestamp === null) return undefined;
@@ -34,6 +38,12 @@ export default function Study() {
     const intervalId = window.setInterval(() => setClockNow(Date.now()), 1000);
     return () => window.clearInterval(intervalId);
   }, [timestamp]);
+
+  useEffect(() => {
+    if (observationLogRef.current) {
+      observationLogRef.current.scrollTop = observationLogRef.current.scrollHeight;
+    }
+  }, [actionEvents.length, studySessions.length, selectedSubjectNumber]);
 
   function startStudy() {
     const startTime = Date.now();
@@ -43,7 +53,6 @@ export default function Study() {
     );
     setTimestamp(startTime);
     setClockNow(startTime);
-    setDuration(null);
     setActionEvents(hasPreviousData
       ? [{ type: "gap", name: "Gap in data", timestamp: startTime }]
       : []);
@@ -54,11 +63,7 @@ export default function Study() {
 
     const eventTimestamp = Date.now();
     const actionEvent = {
-      name: element.name,
-      elementPrime: parentElement?.name || element.name,
-      elementSub: parentElement ? element.name : "",
-      elementId: element.externalId || parentElement?.externalId || "",
-      count: Number.isFinite(Number(element.defaultCount)) ? Number(element.defaultCount) : 1,
+      ...describeElement(element, parentElement),
       note: "",
       timestamp: eventTimestamp
     };
@@ -75,17 +80,95 @@ export default function Study() {
     ));
   }
 
+  function updateEventTarget(target, changes) {
+    if (target.source === "current") {
+      updateActionEvent(target.index, changes);
+      return;
+    }
+
+    if (!updateStudySessionEvent(target.sessionId, target.index, changes)) {
+      throw new Error(`Unable to update event ${target.index} in study session ${target.sessionId}.`);
+    }
+    setStudySessions(getStudySessions());
+  }
+
+  function describeElement(element, parentElement = null) {
+    return {
+      name: element.name,
+      elementPrime: parentElement?.name || element.name,
+      elementSub: parentElement ? element.name : "",
+      elementId: element.externalId || parentElement?.externalId || "",
+      count: Number.isFinite(Number(element.defaultCount)) ? Number(element.defaultCount) : 1
+    };
+  }
+
+  function selectReplacementElement(element, parentElement = null) {
+    if (!selectedEventTarget) return false;
+    updateEventTarget(selectedEventTarget, describeElement(element, parentElement));
+    setSelectedEventTarget(null);
+    setNestedParent(null);
+    return true;
+  }
+
+  function addElement(event) {
+    event.preventDefault();
+    const name = newElementName.trim();
+    if (!name) return;
+
+    const visibleElements = nestedParent?.children || template.elements || [];
+    const occupiedPositions = new Set(visibleElements.map((element, index) =>
+      Number.isInteger(element.position) && element.position >= 0 ? element.position : index
+    ));
+    let position = 0;
+    while (occupiedPositions.has(position)) position += 1;
+
+    const existingIds = (template.elements || []).flatMap(element => [
+      Number(element.id),
+      ...(element.children || []).map(child => Number(child.id))
+    ]).filter(Number.isFinite);
+    const newElement = {
+      id: Math.max(0, ...existingIds) + 1,
+      name,
+      position,
+      backgroundColor: "#dedede",
+      textColor: "#111111",
+      fontFamily: "Arial, sans-serif"
+    };
+    const updatedElements = nestedParent
+      ? (template.elements || []).map(element => element.id === nestedParent.id
+        ? { ...element, children: [ ...(element.children || []), newElement ] }
+        : element)
+      : [ ...(template.elements || []), newElement ];
+    const updatedTemplate = { ...template, elements: updatedElements };
+
+    saveTemplate(updatedTemplate);
+    setTemplate(updatedTemplate);
+    if (nestedParent) {
+      setNestedParent(updatedElements.find(element => element.id === nestedParent.id));
+    }
+    setNewElementName("");
+    setIsAddingElement(false);
+    setSelectedEventTarget(null);
+    if (timestamp !== null) {
+      const parentElement = nestedParent
+        ? updatedElements.find(element => element.id === nestedParent.id)
+        : null;
+      recordAction(newElement, parentElement);
+      setNestedParent(null);
+    }
+  }
+
   function stopStudy() {
     if (timestamp === null) return;
 
     const endTime = Date.now();
     const sessionDuration = endTime - timestamp;
     const subjectNumber = Number(selectedSubjectNumber);
+    const sessionId = String(endTime);
 
-    setDuration(sessionDuration);
     setClockNow(endTime);
     saveStudySession({
-      id: String(endTime),
+      id: sessionId,
       templateId: template.id,
       templateName: template.name,
       subjectId: `${template.id}:${subjectNumber}`,
@@ -95,6 +178,13 @@ export default function Study() {
       durationMs: sessionDuration,
       events: actionEvents
     });
+    if (selectedEventTarget?.source === "current") {
+      setSelectedEventTarget({
+        source: "saved",
+        sessionId,
+        index: selectedEventTarget.index
+      });
+    }
     setStudySessions(getStudySessions());
     setActionEvents([]);
     setTimestamp(null);
@@ -109,12 +199,6 @@ export default function Study() {
     return [ hours, minutes, seconds ]
       .map(value => String(value).padStart(2, "0"))
       .join(":");
-  }
-
-  function editTemplate() {
-    navigate(`/Template/${encodeURIComponent(template.id)}`, {
-      state: { returnTo: `${location.pathname}${location.search}` }
-    });
   }
 
   const columns = Math.max(1, Math.min(12, Number(template?.columns) || 3));
@@ -143,17 +227,25 @@ export default function Study() {
       (Number.isInteger(session.subjectNumber) ? session.subjectNumber : 1) === Number(selectedSubjectNumber)
     )
     .sort((first, second) => first.startTime - second.startTime);
-  const previousEvents = previousSessions.flatMap((session, index) => {
+  const previousEvents = previousSessions.flatMap((session, sessionIndex) => {
     const events = Array.isArray(session.events) ? session.events : [];
-    if (index === 0 || events.some(event => event.type === "gap")) return events;
+    const sessionEvents = events.map((event, index) => ({
+      event,
+      target: { source: "saved", sessionId: session.id, index }
+    }));
+    if (sessionIndex === 0 || events.some(event => event.type === "gap")) return sessionEvents;
 
     return [
-      { type: "gap", name: "Gap in data", timestamp: session.startTime },
-      ...events
+      { event: { type: "gap", name: "Gap in data", timestamp: session.startTime }, target: null },
+      ...sessionEvents
     ];
   });
-  const visibleEvents = [ ...previousEvents, ...actionEvents ];
-  const visibleActionCount = visibleEvents.filter(event => event.type !== "gap").length;
+  const currentEvents = actionEvents.map((event, index) => ({
+    event,
+    target: { source: "current", index }
+  }));
+  const visibleEvents = [ ...previousEvents, ...currentEvents ];
+  const visibleActionCount = visibleEvents.filter(item => item.event.type !== "gap").length;
 
   return (
     <main className="study-page">
@@ -167,6 +259,24 @@ export default function Study() {
             >
               {nestedParent ? "Back" : "Menu"}
             </button>
+            <div className="study-appbar-subject">
+              <select
+                id="study-subject"
+                aria-label="Subject"
+                value={selectedSubjectNumber}
+                disabled={timestamp !== null}
+                onChange={event => {
+                  setSelectedSubjectNumber(event.target.value);
+                  setActionEvents([]);
+                  setSelectedEventTarget(null);
+                  setNestedParent(null);
+                }}
+              >
+                {subjects.map(subject => (
+                  <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
+                ))}
+              </select>
+            </div>
             <h1>{nestedParent?.name || template.name}</h1>
             <button
               className={`record-button${timestamp !== null ? " is-recording" : ""}`}
@@ -176,25 +286,9 @@ export default function Study() {
               onClick={timestamp !== null ? stopStudy : startStudy}
             >
               <span className="record-indicator" aria-hidden="true" />
+              {timestamp !== null ? "Stop" : "Start"}
             </button>
           </header>
-          <section className="study-subject-controls" aria-label="Study subject">
-            <label htmlFor="study-subject">Subject</label>
-            <select
-              id="study-subject"
-              value={selectedSubjectNumber}
-              disabled={timestamp !== null}
-              onChange={event => {
-                setSelectedSubjectNumber(event.target.value);
-                setDuration(null);
-                setActionEvents([]);
-              }}
-            >
-              {subjects.map(subject => (
-                <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
-              ))}
-            </select>
-          </section>
           <div
             ref={gridRef}
             className="study-action-grid"
@@ -214,7 +308,7 @@ export default function Study() {
                   {element && (
                     <button
                       className={`study-action-tile${!nestedParent && element.children?.length > 0 ? " is-nested" : ""}`}
-                      disabled={timestamp === null}
+                      disabled={timestamp === null && !selectedEventTarget}
                       type="button"
                       style={{
                         backgroundColor: element.backgroundColor || "#dedede",
@@ -227,7 +321,9 @@ export default function Study() {
                           return;
                         }
 
-                        recordAction(element, nestedParent);
+                        if (!selectReplacementElement(element, nestedParent)) {
+                          recordAction(element, nestedParent);
+                        }
                         setNestedParent(null);
                       }}
                     >
@@ -239,22 +335,32 @@ export default function Study() {
             })}
           </div>
           <button
-            className="study-action-tile study-add-tile"
+            className="template-add-button study-add-button"
             type="button"
-            disabled={timestamp !== null}
-            onClick={editTemplate}
+            onClick={() => {
+              setNewElementName("");
+              setIsAddingElement(true);
+            }}
           >
-            &lt; Add &gt;
+            + Add button
           </button>
           {currentElements.length === 0 && <p>This template has no action buttons.</p>}
-          <section className="study-observation-log" aria-label="Recorded observation log">
-            <div className="study-readout" role="status">
-              <span>{timestamp !== null ? "RECORDING" : duration !== null ? "SAVED" : "READY"}</span>
-              <strong>{formatClock(timestamp !== null ? clockNow - timestamp : duration || 0)}</strong>
-              <span>{visibleActionCount} actions</span>
-            </div>
+          <section
+            className={`study-observation-log${timestamp !== null ? " is-recording" : ""}`}
+            aria-label="Recorded observation log"
+          >
+            {timestamp !== null && (
+              <div className="study-readout" role="status">
+                <span>RECORDING</span>
+                <strong>{formatClock(clockNow - timestamp)}</strong>
+                <span>{visibleActionCount} actions</span>
+              </div>
+            )}
             <div className="observation-log-heading">
-              <h2>Observation log</h2>
+              <div className="observation-log-title">
+                <h2>Observation log</h2>
+                {selectedEventTarget && <span>Select a button to replace this action</span>}
+              </div>
               <button
                 type="button"
                 onClick={() => navigate(`/Results?templateId=${encodeURIComponent(template.id)}&subjectNumber=${selectedSubjectNumber}`)}
@@ -265,23 +371,29 @@ export default function Study() {
             {visibleEvents.length === 0 ? (
               <p className="observation-log-empty">Recorded actions appear here during capture.</p>
             ) : (
-              <ol className="observation-log-list">
-                {[ ...visibleEvents ].reverse().map((event, reverseIndex) => {
-                  const index = visibleEvents.length - reverseIndex - 1;
-                  const isCurrentEvent = index >= previousEvents.length;
-                  const currentEventIndex = index - previousEvents.length;
+              <ol className="observation-log-list" ref={observationLogRef}>
+                {visibleEvents.map(({ event, target }, index) => {
                   const eventKey = `${event.timestamp}-${index}`;
+                  const isSelectedForReplacement =
+                    selectedEventTarget?.source === target?.source &&
+                    selectedEventTarget?.sessionId === target?.sessionId &&
+                    selectedEventTarget?.index === target?.index;
                   return (
                     <li className="observation-log-entry" key={eventKey}>
                       {event.type === "gap" ? (
                         <span className="gap-in-data">Gap in data</span>
                       ) : (
                         <>
-                          <span className="observation-action-name">
+                          <button
+                            className={`observation-action-name${isSelectedForReplacement ? " is-selected" : ""}`}
+                            type="button"
+                            aria-pressed={isSelectedForReplacement}
+                            onClick={() => setSelectedEventTarget(isSelectedForReplacement ? null : target)}
+                          >
                             {event.elementPrime
                               ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
                               : event.name}
-                          </span>
+                          </button>
                           <time dateTime={new Date(event.timestamp).toISOString()}>
                             {new Date(event.timestamp).toLocaleTimeString()}
                           </time>
@@ -292,8 +404,7 @@ export default function Study() {
                               min="0"
                               step="any"
                               value={event.count ?? 1}
-                              disabled={!isCurrentEvent}
-                              onChange={changeEvent => updateActionEvent(currentEventIndex, {
+                              onChange={changeEvent => updateEventTarget(target, {
                                 count: changeEvent.target.value === "" ? "" : Number(changeEvent.target.value)
                               })}
                             />
@@ -303,10 +414,9 @@ export default function Study() {
                             type="button"
                             aria-label={event.note ? "Edit note" : "Add note"}
                             title={event.note ? "Edit note" : "Add note"}
-                            disabled={!isCurrentEvent}
+                            disabled={!target}
                             onClick={() => setNoteEditor({
-                              eventKey,
-                              eventIndex: currentEventIndex,
+                              target,
                               note: event.note || ""
                             })}
                           >
@@ -352,7 +462,7 @@ export default function Study() {
                       <button
                         type="button"
                         onClick={() => {
-                          updateActionEvent(noteEditor.eventIndex, { note: noteEditor.note });
+                          updateEventTarget(noteEditor.target, { note: noteEditor.note });
                           setNoteEditor(null);
                         }}
                       >
@@ -360,6 +470,40 @@ export default function Study() {
                       </button>
                     </div>
                   </section>
+              </div>
+            )}
+            {isAddingElement && (
+              <div
+                className="study-note-backdrop"
+                onClick={() => setIsAddingElement(false)}
+              >
+                <form
+                  className="study-note-dialog"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="study-add-title"
+                  onSubmit={addElement}
+                  onClick={event => event.stopPropagation()}
+                >
+                  <h2 id="study-add-title">Add study button</h2>
+                  <label htmlFor="study-add-name">Button name</label>
+                  <input
+                    id="study-add-name"
+                    className="study-add-name"
+                    autoFocus
+                    value={newElementName}
+                    onChange={event => setNewElementName(event.target.value)}
+                    placeholder="Enter an element name"
+                  />
+                  <div className="study-note-dialog-actions">
+                    <button type="button" onClick={() => setIsAddingElement(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" disabled={!newElementName.trim()}>
+                      OK
+                    </button>
+                  </div>
+                </form>
               </div>
             )}
           </section>

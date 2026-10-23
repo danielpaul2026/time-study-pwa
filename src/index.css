@@ -334,6 +334,18 @@ input {
   cursor: pointer;
 }
 
+.study-add-button {
+  display: block;
+  flex: 0 0 auto;
+  width: calc(100% - 16px);
+  min-height: 44px;
+  margin: 0 8px 8px;
+}
+
+.template-add-button.study-add-button {
+  flex: 0 0 auto;
+}
+
 .template-button-actions {
   display: flex;
   gap: 8px;
@@ -660,7 +672,8 @@ input {
 }
 
 .study-appbar {
-  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  grid-template-columns: 48px 100px minmax(0, 1fr) auto;
+  gap: 4px;
   padding: 3px 7px;
 }
 
@@ -685,28 +698,51 @@ input {
   font-size: 11px;
 }
 
+.study-appbar-subject select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 4px 5px;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 4px;
+  background: #fff;
+  color: #17364b;
+  font: inherit;
+  font-size: 11px;
+}
+
 .record-button {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   place-items: center;
-  width: 40px;
-  min-height: 40px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
+  min-width: 68px;
+  min-height: 38px;
+  padding: 0 8px;
+  border: 1px solid #fff;
+  border-radius: 5px;
+  background: #fff;
+  color: #17643c;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .record-indicator {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #f02727;
-  box-shadow: inset 0 2px 2px rgb(255 255 255 / 55%), 0 1px 3px rgb(0 0 0 / 45%);
+  background: #16834d;
+}
+
+.record-button.is-recording {
+  background: #c62828;
+  color: #fff;
 }
 
 .record-button.is-recording .record-indicator {
-  background: #f02727;
-  box-shadow: 0 0 0 4px rgb(255 255 255 / 30%);
+  border-radius: 2px;
+  background: #fff;
 }
 
 .study-action-tile {
@@ -752,10 +788,14 @@ input {
 
 .study-observation-log {
   display: flex;
-  flex: 0 0 180px;
+  flex: 0 0 218px;
   flex-direction: column;
   min-height: 0;
   background: #fff;
+}
+
+.study-observation-log.is-recording {
+  flex-basis: 180px;
 }
 
 .study-readout {
@@ -790,6 +830,21 @@ input {
   color: #515a60;
   font-size: 12px;
   font-weight: 400;
+}
+
+.observation-log-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.observation-log-title span {
+  overflow: hidden;
+  color: #1769a1;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .observation-log-heading button {
@@ -829,10 +884,26 @@ input {
 }
 
 .observation-log-list li .observation-action-name {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   overflow: hidden;
   color: #1769a1;
+  font: inherit;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.observation-log-list li .observation-action-name.is-selected {
+  padding-left: 6px;
+  border-left: 3px solid #f2b51c;
+  background: #fff8df;
 }
 
 .observation-log-list li .gap-in-data {
@@ -916,6 +987,16 @@ input {
   margin: 0;
   color: #17364b;
   font-size: 17px;
+}
+
+.study-note-dialog label {
+  color: #39464e;
+  font-size: 13px;
+}
+
+.study-add-name {
+  width: 100%;
+  min-width: 0;
 }
 
 .study-note-input {

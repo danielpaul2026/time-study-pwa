@@ -14,6 +14,8 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 - selected template buttons can be deleted from the action row
 - ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data
 - the study preview and results show a subject's previous runs, with a gap marker when recording resumes
+- the observation log is chronological; action counts and notes remain editable after recording, and selecting an action then a template button replaces its element without interrupting capture
+- the study screen can add named buttons directly to the template; during capture, the new action is recorded only after confirming its name
 - results display one template and subject at a time, with separate subject- and template-scoped clearing
 - results show all selected subject actions in one export-ready table with element details, notes, counts, dates, timestamps, elapsed time, and study number
 - button properties can define an optional Element ID and default count; during capture, action counts and notes can be adjusted per action
