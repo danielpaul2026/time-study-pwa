@@ -7,6 +7,7 @@ import {
   getStudySubjects,
   getTemplates
 } from "../data/studyStore";
+import enVistaLogo from "../assets/enVista_Logo_Color.png";
 
 export default function Results() {
   const navigate = useNavigate();
@@ -42,6 +43,48 @@ export default function Results() {
     )
     .sort((first, second) => first.startTime - second.startTime);
   const selectedTemplateSessions = sessions.filter(session => session.templateId === selectedTemplateId);
+  const totalDuration = selectedSessions.reduce((total, session) =>
+    total + (Number.isFinite(session.durationMs) ? session.durationMs : 0), 0
+  );
+  const totalActions = selectedSessions.reduce((total, session) =>
+    total + (Array.isArray(session.events)
+      ? session.events.filter(event => event.type !== "gap").length
+      : 0), 0
+  );
+  let nextRowId = 1;
+  const resultRows = selectedSessions.flatMap((session, sessionIndex) => {
+    const rows = [];
+    const events = Array.isArray(session.events) ? session.events : [];
+    let previousTimestamp = session.startTime;
+
+    if (sessionIndex > 0 && !events.some(event => event.type === "gap")) {
+      rows.push({ type: "gap", id: `gap-${session.id}`, studyNumber: sessionIndex + 1 });
+    }
+
+    events.forEach((event, eventIndex) => {
+      if (event.type === "gap") {
+        previousTimestamp = event.timestamp;
+        if (sessionIndex > 0 || eventIndex > 0) {
+          rows.push({ type: "gap", id: `gap-${session.id}-${eventIndex}`, studyNumber: sessionIndex + 1 });
+        }
+        return;
+      }
+
+      const timestamp = Number(event.timestamp);
+      if (!Number.isFinite(timestamp) || !Number.isFinite(previousTimestamp)) return;
+      rows.push({
+        id: nextRowId,
+        event,
+        startTimestamp: previousTimestamp,
+        elapsedSeconds: Math.max(0, (timestamp - previousTimestamp) / 1000),
+        studyNumber: sessionIndex + 1
+      });
+      nextRowId += 1;
+      previousTimestamp = timestamp;
+    });
+
+    return rows;
+  });
 
   function formatDuration(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -73,88 +116,121 @@ export default function Results() {
 
   return (
     <main className="results-page">
-      <nav className="page-nav" aria-label="Main navigation">
-        <button type="button" onClick={() => navigate("/")}>Menu</button>
-        <button type="button" onClick={() => navigate("/Template")}>Create template</button>
-      </nav>
-      <h1>Study results</h1>
+      <header className="menu-header results-header">
+        <div className="menu-brand">
+          <img src={enVistaLogo} alt="enVista" />
+          <h1>Study Results</h1>
+        </div>
+        <nav className="menu-actions" aria-label="Results navigation">
+          <button type="button" onClick={() => navigate("/")}>Menu</button>
+        </nav>
+      </header>
       {availableTemplates.length > 0 && (
-        <section className="results-filters" aria-label="Choose results">
-          <label htmlFor="results-template">Template</label>
-          <select
-            id="results-template"
-            value={selectedTemplateId}
-            onChange={event => setSelectedTemplateId(event.target.value)}
-          >
-            {availableTemplates.map(template => (
-              <option key={template.id} value={template.id}>{template.name}</option>
-            ))}
-          </select>
-          <label htmlFor="results-subject">Subject</label>
-          <select
-            id="results-subject"
-            value={selectedSubjectNumber}
-            onChange={event => setSelectedSubjectNumber(event.target.value)}
-          >
-            {subjects.map(subject => (
-              <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
-            ))}
-          </select>
-          <button type="button" disabled={!selectedSessions.length} onClick={clearSubjectData}>
-            Clear subject data
-          </button>
-          <button type="button" disabled={!selectedTemplateSessions.length} onClick={clearTemplateData}>
-            Clear template data
-          </button>
+        <section className="results-filter-section" aria-label="Choose results">
+          <div className="results-filters">
+            <label htmlFor="results-template">Template</label>
+            <select
+              id="results-template"
+              value={selectedTemplateId}
+              onChange={event => setSelectedTemplateId(event.target.value)}
+            >
+              {availableTemplates.map(template => (
+                <option key={template.id} value={template.id}>{template.name}</option>
+              ))}
+            </select>
+            <label htmlFor="results-subject">Subject</label>
+            <select
+              id="results-subject"
+              value={selectedSubjectNumber}
+              onChange={event => setSelectedSubjectNumber(event.target.value)}
+            >
+              {subjects.map(subject => (
+                <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
+              ))}
+            </select>
+          </div>
+          <div className="results-data-actions">
+            <button type="button" disabled={!selectedSessions.length} onClick={clearSubjectData}>
+              Clear subject data
+            </button>
+            <button type="button" disabled={!selectedTemplateSessions.length} onClick={clearTemplateData}>
+              Clear template data
+            </button>
+          </div>
         </section>
       )}
-      {!selectedTemplateId ? (
-        <p>No completed studies yet.</p>
-      ) : selectedSessions.length === 0 ? (
-        <p>No completed studies for Subject {selectedSubjectNumber} yet.</p>
-      ) : (
-        <section className="subject-results">
-          <h2>{selectedTemplate?.name} · Subject {selectedSubjectNumber}</h2>
-          <ol className="session-list">
-            {selectedSessions.map((session, sessionIndex) => {
-              const events = Array.isArray(session.events) ? session.events : [];
-              const hasGapMarker = events.some(event => event.type === "gap");
-              const actions = events.filter(event => event.type !== "gap");
+      <section className="results-summary-section" aria-label="Selected results summary">
+        {!selectedTemplateId ? (
+          <p className="results-empty-state">No completed studies yet.</p>
+        ) : selectedSessions.length === 0 ? (
+          <p className="results-empty-state">
+            No completed studies for {selectedTemplate?.name}, Subject {selectedSubjectNumber} yet.
+          </p>
+        ) : (
+          <>
+            <h2>{selectedTemplate?.name} · Subject {selectedSubjectNumber}</h2>
+            <div className="menu-summary-metrics results-summary-metrics">
+              <p className="menu-metric">Studies: {selectedSessions.length}</p>
+              <p className="menu-metric">Total time: {formatDuration(totalDuration)}</p>
+              <p className="menu-metric">Total actions: {totalActions}</p>
+            </div>
+          </>
+        )}
+      </section>
+      <section className="results-session-section" aria-label="Study data table">
+        {selectedSessions.length > 0 ? (
+          <div className="results-table-scroll">
+            <table className="results-data-table">
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">Element Prime</th>
+                  <th scope="col">Element Sub</th>
+                  <th scope="col">Element ID</th>
+                  <th scope="col">Note</th>
+                  <th scope="col">Count</th>
+                  <th scope="col">Start Date</th>
+                  <th scope="col">Start Time</th>
+                  <th scope="col">Seconds Elapsed</th>
+                  <th scope="col">Minutes Elapsed</th>
+                  <th scope="col">Study</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resultRows.map(row => {
+                  if (row.type === "gap") {
+                    return (
+                      <tr className="results-gap-row" key={row.id}>
+                        <td colSpan="11">Gap in data · Study {row.studyNumber}</td>
+                      </tr>
+                    );
+                  }
 
-              return (
-                <li className="session-entry" key={session.id}>
-                  <p>
-                    {new Date(session.startTime).toLocaleString()}
-                    {" · "}
-                    {formatDuration(session.durationMs)}
-                  </p>
-                  <p>{actions.length} actions recorded</p>
-                  {(sessionIndex > 0 || events.length > 0) && (
-                    <ol className="event-list">
-                      {sessionIndex > 0 && !hasGapMarker && (
-                        <li className="gap-in-data">Gap in data</li>
-                      )}
-                      {events.map((event, index) => (
-                        <li className={event.type === "gap" ? "gap-in-data" : ""} key={`${session.id}-${index}`}>
-                          {event.type === "gap"
-                            ? "Gap in data"
-                            : `${event.name} at ${new Date(event.timestamp).toLocaleTimeString()}`}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/Study?templateId=${encodeURIComponent(session.templateId)}&subjectNumber=${session.subjectNumber || 1}`)}
-                  >
-                    Repeat study
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </section>
-      )}
+                  const startDate = new Date(row.startTimestamp);
+                  const element = row.event;
+                  return (
+                    <tr key={`${row.studyNumber}-${row.id}`}>
+                      <td>{row.id}</td>
+                      <td>{element.elementPrime || element.name || ""}</td>
+                      <td>{element.elementSub || ""}</td>
+                      <td>{element.elementId || ""}</td>
+                      <td>{element.note || ""}</td>
+                      <td>{Number.isFinite(Number(element.count)) ? Number(element.count) : 1}</td>
+                      <td>{startDate.toLocaleDateString()}</td>
+                      <td>{startDate.toLocaleTimeString()}</td>
+                      <td>{row.elapsedSeconds.toFixed(3)}</td>
+                      <td>{(row.elapsedSeconds / 60).toFixed(3)}</td>
+                      <td>{row.studyNumber}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="results-empty-state">Study data will appear here when actions are recorded.</p>
+        )}
+      </section>
     </main>
   );
 }

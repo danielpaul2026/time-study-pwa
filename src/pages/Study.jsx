@@ -26,6 +26,7 @@ export default function Study() {
   const [ clockNow, setClockNow ] = useState(0);
   const [ studySessions, setStudySessions ] = useState(() => getStudySessions());
   const [ nestedParent, setNestedParent ] = useState(null);
+  const [ noteEditor, setNoteEditor ] = useState(null);
 
   useEffect(() => {
     if (timestamp === null) return undefined;
@@ -48,13 +49,30 @@ export default function Study() {
       : []);
   }
 
-  function recordAction(element) {
+  function recordAction(element, parentElement = null) {
     if (timestamp === null) return;
+
+    const eventTimestamp = Date.now();
+    const actionEvent = {
+      name: element.name,
+      elementPrime: parentElement?.name || element.name,
+      elementSub: parentElement ? element.name : "",
+      elementId: element.externalId || parentElement?.externalId || "",
+      count: Number.isFinite(Number(element.defaultCount)) ? Number(element.defaultCount) : 1,
+      note: "",
+      timestamp: eventTimestamp
+    };
 
     setActionEvents(currentEvents => [
       ...currentEvents,
-      { name: element.name, timestamp: Date.now() }
+      actionEvent
     ]);
+  }
+
+  function updateActionEvent(index, changes) {
+    setActionEvents(currentEvents => currentEvents.map((event, eventIndex) =>
+      eventIndex === index ? { ...event, ...changes } : event
+    ));
   }
 
   function stopStudy() {
@@ -209,7 +227,7 @@ export default function Study() {
                           return;
                         }
 
-                        recordAction(element);
+                        recordAction(element, nestedParent);
                         setNestedParent(null);
                       }}
                     >
@@ -248,21 +266,101 @@ export default function Study() {
               <p className="observation-log-empty">Recorded actions appear here during capture.</p>
             ) : (
               <ol className="observation-log-list">
-                {[ ...visibleEvents ].reverse().map((event, index) => (
-                  <li key={`${event.timestamp}-${index}`}>
-                    {event.type === "gap" ? (
-                      <span className="gap-in-data">Gap in data</span>
-                    ) : (
-                      <>
-                        <span>{event.name}</span>
-                        <time dateTime={new Date(event.timestamp).toISOString()}>
-                          {new Date(event.timestamp).toLocaleTimeString()}
-                        </time>
-                      </>
-                    )}
-                  </li>
-                ))}
+                {[ ...visibleEvents ].reverse().map((event, reverseIndex) => {
+                  const index = visibleEvents.length - reverseIndex - 1;
+                  const isCurrentEvent = index >= previousEvents.length;
+                  const currentEventIndex = index - previousEvents.length;
+                  const eventKey = `${event.timestamp}-${index}`;
+                  return (
+                    <li className="observation-log-entry" key={eventKey}>
+                      {event.type === "gap" ? (
+                        <span className="gap-in-data">Gap in data</span>
+                      ) : (
+                        <>
+                          <span className="observation-action-name">
+                            {event.elementPrime
+                              ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
+                              : event.name}
+                          </span>
+                          <time dateTime={new Date(event.timestamp).toISOString()}>
+                            {new Date(event.timestamp).toLocaleTimeString()}
+                          </time>
+                          <label className="study-count-control">
+                            Count:
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              value={event.count ?? 1}
+                              disabled={!isCurrentEvent}
+                              onChange={changeEvent => updateActionEvent(currentEventIndex, {
+                                count: changeEvent.target.value === "" ? "" : Number(changeEvent.target.value)
+                              })}
+                            />
+                          </label>
+                          <button
+                            className={`study-note-button${event.note ? " has-note" : ""}`}
+                            type="button"
+                            aria-label={event.note ? "Edit note" : "Add note"}
+                            title={event.note ? "Edit note" : "Add note"}
+                            disabled={!isCurrentEvent}
+                            onClick={() => setNoteEditor({
+                              eventKey,
+                              eventIndex: currentEventIndex,
+                              note: event.note || ""
+                            })}
+                          >
+                            <svg viewBox="0 0 20 20" aria-hidden="true">
+                              <path d="M4 2.5h12v15H4zM7 6h6M7 9h6M7 12h4" />
+                            </svg>
+                          </button>
+                          </>
+                        )}
+                      </li>
+                  );
+                  })}
               </ol>
+            )}
+            {noteEditor && (
+              <div
+                  className="study-note-backdrop"
+                  onClick={() => setNoteEditor(null)}
+              >
+                  <section
+                    className="study-note-dialog"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="study-note-title"
+                    onClick={event => event.stopPropagation()}
+                  >
+                    <h2 id="study-note-title">Action note</h2>
+                    <textarea
+                      className="study-note-input"
+                      autoFocus
+                      aria-label="Action note"
+                      value={noteEditor.note}
+                      onChange={event => setNoteEditor(current => ({
+                        ...current,
+                        note: event.target.value
+                      }))}
+                      placeholder="Add a note"
+                    />
+                    <div className="study-note-dialog-actions">
+                      <button type="button" onClick={() => setNoteEditor(null)}>
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateActionEvent(noteEditor.eventIndex, { note: noteEditor.note });
+                          setNoteEditor(null);
+                        }}
+                      >
+                        OK
+                      </button>
+                    </div>
+                  </section>
+              </div>
             )}
           </section>
         </>

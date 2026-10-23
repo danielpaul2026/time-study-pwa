@@ -15,4 +15,6 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 - ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data
 - the study preview and results show a subject's previous runs, with a gap marker when recording resumes
 - results display one template and subject at a time, with separate subject- and template-scoped clearing
+- results show all selected subject actions in one export-ready table with element details, notes, counts, dates, timestamps, elapsed time, and study number
+- button properties can define an optional Element ID and default count; during capture, action counts and notes can be adjusted per action
 - more style options

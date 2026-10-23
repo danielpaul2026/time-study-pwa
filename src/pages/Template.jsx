@@ -588,6 +588,23 @@ export default function Template() {
                 value={editingElement.name}
                 onChange={event => updateElement(editingElement.id, { name: event.target.value })}
               />
+              <label htmlFor="editing-element-id">Element ID</label>
+              <input
+                id="editing-element-id"
+                value={editingElement.externalId || ""}
+                onChange={event => updateElement(editingElement.id, { externalId: event.target.value })}
+              />
+              <label htmlFor="editing-element-count">Default count</label>
+              <input
+                id="editing-element-count"
+                type="number"
+                min="0"
+                step="any"
+                value={editingElement.defaultCount ?? 1}
+                onChange={event => updateElement(editingElement.id, {
+                  defaultCount: event.target.value === "" ? "" : Number(event.target.value)
+                })}
+              />
               <section className="nested-button-editor" aria-label="Subbuttons">
                 <h3>Subbuttons</h3>
                 <p>Adding subbuttons marks this as a nested button. Subbuttons are the final level.</p>
@@ -674,6 +691,25 @@ export default function Template() {
                 value={editingSubbutton.name}
                 onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
                   name: event.target.value
+                })}
+              />
+              <label htmlFor="editing-subbutton-id">Element ID</label>
+              <input
+                id="editing-subbutton-id"
+                value={editingSubbutton.externalId || ""}
+                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                  externalId: event.target.value
+                })}
+              />
+              <label htmlFor="editing-subbutton-count">Default count</label>
+              <input
+                id="editing-subbutton-count"
+                type="number"
+                min="0"
+                step="any"
+                value={editingSubbutton.defaultCount ?? 1}
+                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                  defaultCount: event.target.value === "" ? "" : Number(event.target.value)
                 })}
               />
               <div className="color-settings">
