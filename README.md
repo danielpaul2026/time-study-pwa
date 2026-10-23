@@ -3,7 +3,9 @@
 This PWA is intended to be used as a local tool for others at enVista to take time studies. The goal is to make it easy to configure and use without both the overcomplication and limitations of the current solution (Quetech Workstudy+). 
 
 ## Features
-- simplified menu
+- enVista-branded menu with selectable templates and per-template study summaries
+- template import and sharing from the menu
+- stopwatch action reserved for a future feature
 - configurable template grid columns and row height
 - buttons can be dragged between dotted grid cells, leaving cells empty
 - ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data
