@@ -27,6 +27,13 @@ export function saveTemplate(template) {
   localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
 }
 
+export function deleteTemplate(templateId) {
+  const templates = getTemplates().filter(template => template.id !== templateId);
+  const sessions = getStudySessions().filter(session => session.templateId !== templateId);
+  localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+}
+
 export function getStudySessions() {
   return readList(SESSION_STORAGE_KEY);
 }

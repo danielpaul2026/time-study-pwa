@@ -4,12 +4,14 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 
 ## Features
 - enVista-branded menu with selectable templates and per-template study summaries
-- template import and sharing from the menu
+- template import, template/data sharing, and warning-confirmed template deletion from the Menu action bar
 - stopwatch action reserved for a future feature
 - configurable template grid columns and row height
+- empty grid cells on Template and Study display an Add control for creating buttons in place; when a grid is full, Add moves to the adjacent action bar
 - buttons can be dragged between dotted grid cells, leaving cells empty
 - template buttons can have one level of subbuttons; black corner markers identify buttons that open subbuttons, and selecting a subbutton records it and returns to the main study screen
-- template editing supports selecting buttons for Properties, dragging them to arrange the grid, and opening a subbutton editor with Back navigation; a button without subbuttons stays a normal button
+- template editing supports selecting buttons for Properties, dragging them to arrange the grid, and explicitly nesting or unnesting buttons in Properties; double-click a nested button to open its subbutton grid
+- template grid controls use compact, aligned dropdowns; Delete/Add/Properties are displayed as tabs, and the Save control highlights unsaved changes
 - template grid columns and row height are saved independently for the top-level view and for each button's subbutton view; grid contents stay within the visible area, with columns increased automatically when needed
 - selected template buttons can be deleted from the action row
 - ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data

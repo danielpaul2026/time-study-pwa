@@ -7,7 +7,6 @@ import {
   getStudySubjects,
   getTemplates
 } from "../data/studyStore";
-import enVistaLogo from "../assets/enVista_Logo_Color.png";
 
 export default function Results() {
   const navigate = useNavigate();
@@ -100,7 +99,7 @@ export default function Results() {
   function clearSubjectData() {
     const subjectNumber = Number(selectedSubjectNumber);
     if (!selectedTemplateId || !selectedSessions.length) return;
-    if (!window.confirm(`Clear all data for ${selectedTemplate?.name || "this template"}, Subject ${subjectNumber}? This cannot be undone.`)) return;
+    if (!window.confirm(`Warning: This will permanently delete all study data for ${selectedTemplate?.name || "this template"}, Subject ${subjectNumber}. This cannot be undone. Continue?`)) return;
 
     clearStudySubjectData(selectedTemplateId, subjectNumber);
     setSessions(getStudySessions());
@@ -108,7 +107,7 @@ export default function Results() {
 
   function clearTemplateData() {
     if (!selectedTemplateId || !selectedTemplateSessions.length) return;
-    if (!window.confirm(`Clear all study data for ${selectedTemplate?.name || "this template"}? This cannot be undone.`)) return;
+    if (!window.confirm(`Warning: This will permanently delete all study data for ${selectedTemplate?.name || "this template"}, across every subject. This cannot be undone. Continue?`)) return;
 
     clearStudyData(selectedTemplateId);
     setSessions(getStudySessions());
@@ -117,20 +116,27 @@ export default function Results() {
   return (
     <main className="results-page">
       <header className="menu-header results-header">
-        <div className="menu-brand">
-          <img src={enVistaLogo} alt="enVista" />
-          <h1>Study Results</h1>
-        </div>
-        <nav className="menu-actions" aria-label="Results navigation">
+        <nav className="menu-actions results-menu-action" aria-label="Results navigation">
           <button type="button" onClick={() => navigate("/")}>Menu</button>
         </nav>
+        <div className="menu-brand">
+          <h1>Study Results</h1>
+        </div>
+        <button
+          className="results-take-study"
+          type="button"
+          disabled={!selectedTemplateId}
+          onClick={() => navigate(`/Study?templateId=${encodeURIComponent(selectedTemplateId)}&subjectNumber=${selectedSubjectNumber}`)}
+        >
+          Take Study
+        </button>
       </header>
       {availableTemplates.length > 0 && (
         <section className="results-filter-section" aria-label="Choose results">
-          <div className="results-filters">
-            <label htmlFor="results-template">Template</label>
+          <div className="results-filter-group results-template-filter">
             <select
               id="results-template"
+              aria-label="Template"
               value={selectedTemplateId}
               onChange={event => setSelectedTemplateId(event.target.value)}
             >
@@ -138,9 +144,14 @@ export default function Results() {
                 <option key={template.id} value={template.id}>{template.name}</option>
               ))}
             </select>
-            <label htmlFor="results-subject">Subject</label>
+            <button type="button" disabled={!selectedTemplateSessions.length} onClick={clearTemplateData}>
+              Clear template data
+            </button>
+          </div>
+          <div className="results-filter-group results-subject-filter">
             <select
               id="results-subject"
+              aria-label="Subject"
               value={selectedSubjectNumber}
               onChange={event => setSelectedSubjectNumber(event.target.value)}
             >
@@ -148,13 +159,8 @@ export default function Results() {
                 <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
               ))}
             </select>
-          </div>
-          <div className="results-data-actions">
             <button type="button" disabled={!selectedSessions.length} onClick={clearSubjectData}>
               Clear subject data
-            </button>
-            <button type="button" disabled={!selectedTemplateSessions.length} onClick={clearTemplateData}>
-              Clear template data
             </button>
           </div>
         </section>

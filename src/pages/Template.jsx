@@ -47,6 +47,10 @@ function createTemplateId() {
   return String(Date.now());
 }
 
+function isNestedElement(element) {
+  return element.isNested === true || element.children?.length > 0;
+}
+
 export default function Template() {
   const { templateId } = useParams();
   const navigate = useNavigate();
@@ -58,8 +62,10 @@ export default function Template() {
   const [ elements, setElements ] = useState(initialTemplate?.elements || []);
   const [ columns, setColumns ] = useState(String(Math.min(8, Math.max(2, Number(initialTemplate?.columns) || 3))));
   const [ rowHeightLines, setRowHeightLines ] = useState(String(Math.min(5, Math.max(1, Number(initialTemplate?.rowHeightLines) || 2))));
+  const [ isDirty, setIsDirty ] = useState(!initialTemplate);
   const [ isAdding, setIsAdding ] = useState(false);
   const [ elementName, setElementName ] = useState("");
+  const [ addPosition, setAddPosition ] = useState(null);
   const [ draggedElementIndex, setDraggedElementIndex ] = useState(null);
   const [ editingElementId, setEditingElementId ] = useState(null);
   const [ editingSubbuttonIndex, setEditingSubbuttonIndex ] = useState(null);
@@ -67,9 +73,14 @@ export default function Template() {
   const [ nestedParentId, setNestedParentId ] = useState(null);
   const [ activeElementIndex, setActiveElementIndex ] = useState(null);
   const didPointerDrag = useRef(false);
+  const lastElementClick = useRef({ id: null, time: 0 });
   const [ nextElementId, setNextElementId ] = useState(() =>
     Math.max(0, ...(initialTemplate?.elements || []).map(element => Number(element.id))) + 1
   );
+
+  function markUnsaved() {
+    setIsDirty(true);
+  }
 
   function addElement(event) {
     event.preventDefault();
@@ -81,13 +92,17 @@ export default function Template() {
       const visibleElements = currentParent
         ? currentParent.children || []
         : currentElements;
-      const occupiedCells = new Set(visibleElements.map((element, index) =>
-        Number.isInteger(element.position) && element.position >= 0
-          ? element.position
-          : index
+      const occupiedCells = new Set(normalizePositions(
+        visibleElements,
+        gridRows * columnCount
+      ).map((element, index) =>
+        Number.isInteger(element.position) && element.position >= 0 ? element.position : index
       ));
-      let position = 0;
-      while (occupiedCells.has(position)) position += 1;
+      let position = addPosition;
+      if (position === null || occupiedCells.has(position)) {
+        position = 0;
+        while (occupiedCells.has(position)) position += 1;
+      }
 
       const newElement = {
         id: nextElementId,
@@ -104,18 +119,22 @@ export default function Template() {
         : element
       );
     });
+    markUnsaved();
     setNextElementId(currentId => currentId + 1);
     setElementName("");
+    setAddPosition(null);
     setIsAdding(false);
   }
 
   function updateElement(elementId, changes) {
+    markUnsaved();
     setElements(currentElements => currentElements.map(element =>
       element.id === elementId ? { ...element, ...changes } : element
     ));
   }
 
   function updateSubbutton(elementId, subbuttonIndex, changes) {
+    markUnsaved();
     setElements(currentElements => currentElements.map(element =>
       element.id === elementId
         ? {
@@ -128,35 +147,35 @@ export default function Template() {
     ));
   }
 
-  function addSubbutton(elementId) {
-    setElements(currentElements => currentElements.map(element =>
-      element.id === elementId
-        ? {
-            ...element,
-            children: [
-              ...(element.children || []),
-              {
-                name: "Subbutton",
-                backgroundColor: "#dedede",
-                textColor: "#111111",
-                fontFamily: "Arial, sans-serif"
-              }
-            ]
-          }
-        : element
-    ));
-  }
-
   function removeSubbutton(elementId, subbuttonIndex) {
+    markUnsaved();
     setElements(currentElements => currentElements.map(element =>
       element.id === elementId
-        ? {
-            ...element,
-            children: (element.children || []).filter((_, index) => index !== subbuttonIndex)
-          }
+        ? (() => {
+            const children = (element.children || []).filter((_, index) => index !== subbuttonIndex);
+            return {
+              ...element,
+              children,
+              isNested: children.length > 0
+            };
+          })()
         : element
     ));
     if (nestedParentId === elementId) setActiveElementIndex(null);
+  }
+
+  function unnestElement(elementId) {
+    markUnsaved();
+    setElements(currentElements => currentElements.map(element => {
+      if (element.id !== elementId) return element;
+      return {
+        ...element,
+        children: undefined,
+        childrenColumns: undefined,
+        childrenRowHeightLines: undefined,
+        isNested: false
+      };
+    }));
   }
 
   function deleteActiveElement() {
@@ -168,6 +187,7 @@ export default function Template() {
 
     const selectedElement = currentElements[activeElementIndex];
     if (!selectedElement) return;
+    markUnsaved();
     setElements(currentElements => currentElements.filter(element => element.id !== selectedElement.id));
     setActiveElementIndex(null);
   }
@@ -186,6 +206,7 @@ export default function Template() {
   function moveElementToCell(targetCell) {
     if (draggedElementIndex === null) return;
 
+    markUnsaved();
     setElements(currentElements => {
       function moveInList(list) {
         const normalizedList = normalizePositions(list, gridRows * columnCount);
@@ -253,7 +274,7 @@ export default function Template() {
     saveTemplate({
       id: templateId || createTemplateId(),
       name: cleanName,
-      columns: rootColumnCount,
+      columns: nestedParent ? rootColumnCount : columnCount,
       rowHeightLines: rootLineCount,
       elements: (nestedParent ? elements : normalizePositions(elements, gridRows * columnCountForSave)).map(element => ({
         ...element,
@@ -292,13 +313,14 @@ export default function Template() {
     Math.min(preferredRowHeight, gridRows > baseRows ? availableHeightForRows / gridRows : preferredRowHeight)
   );
   const columnCountForSave = columnCount;
-  const viewColumnSetting = preferredColumns;
+  const viewColumnSetting = columnCount;
   const viewLineSetting = Math.min(5, preferredLineCount);
   const visibleElements = normalizePositions(currentElements, gridRows * columnCount);
   const elementsByPosition = new Map(visibleElements.map((element, index) => [
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index,
     element
   ]));
+  const hasEmptyGridCell = elementsByPosition.size < gridRows * columnCount;
   const gridStyle = {
     gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${gridRows}, minmax(${rowHeight}px, 1fr))`
@@ -345,13 +367,17 @@ export default function Template() {
             id="template-name"
             aria-label="Template name"
             value={name}
-            onChange={event => setName(event.target.value)}
+            onChange={event => {
+              setName(event.target.value);
+              markUnsaved();
+            }}
             placeholder="New study template"
             required
           />
           <button
-            className="template-save-button"
+            className={`template-save-button${isDirty ? " is-dirty" : ""}`}
             type="submit"
+            aria-label={isDirty ? "Save unsaved template changes" : "Template saved"}
             disabled={
               !name.trim() ||
               elements.length === 0 ||
@@ -359,69 +385,85 @@ export default function Template() {
               elements.some(element => element.children?.some(child => !child.name.trim()))
             }
           >
-            Save
+            {isDirty ? "Save*" : "Saved"}
           </button>
         </header>
 
         <div className="template-grid-settings">
-          <label>
-            Columns
+          <div className="template-grid-setting template-grid-setting-columns">
             <select
+              aria-label="Columns"
               value={viewColumnSetting}
               onChange={event => {
+                markUnsaved();
                 if (nestedParent) {
                   updateElement(nestedParent.id, { childrenColumns: Number(event.target.value) });
                 } else {
                   setColumns(event.target.value);
                 }
-              }}>
+              }}
+            >
               {Array.from({ length: 7 }, (_, index) => index + 2).map(value => (
                 <option key={value} value={value}>{value}</option>
               ))}
             </select>
-          </label>
-          <label>
-            Row height (text lines)
+            <span aria-hidden="true">columns</span>
+          </div>
+          <div className="template-grid-setting template-grid-setting-rows">
             <select
+              aria-label="Lines per row"
               value={viewLineSetting}
               onChange={event => {
+                markUnsaved();
                 if (nestedParent) {
                   updateElement(nestedParent.id, { childrenRowHeightLines: Number(event.target.value) });
                 } else {
                   setRowHeightLines(event.target.value);
                 }
-              }}>
+              }}
+            >
               {Array.from({ length: 5 }, (_, index) => index + 1).map(value => (
                 <option key={value} value={value}>{value}</option>
               ))}
             </select>
-          </label>
+            <span aria-hidden="true">lines per row</span>
+          </div>
         </div>
 
         {isAdding && (
-          <div className="element-form">
-            <label htmlFor="element-name">Button name</label>
-            <input
-              autoFocus
-              id="element-name"
-              value={elementName}
-              onChange={event => setElementName(event.target.value)}
-              placeholder="For example, Pick item"
-            />
-            <button type="button" onClick={addElement} disabled={!elementName.trim()}>
-              Add button
-            </button>
-            <button type="button" onClick={() => setIsAdding(false)}>
-              Cancel
-            </button>
+          <div className="element-editor-backdrop" onClick={() => {
+            setIsAdding(false);
+            setAddPosition(null);
+          }}>
+            <section
+              className="element-editor"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="element-name-title"
+              onClick={event => event.stopPropagation()}
+            >
+              <h2 id="element-name-title">Add button</h2>
+              <label htmlFor="element-name">Button name</label>
+              <input
+                autoFocus
+                id="element-name"
+                value={elementName}
+                onChange={event => setElementName(event.target.value)}
+                placeholder="For example, Pick item"
+              />
+              <div className="template-add-dialog-actions">
+                <button type="button" onClick={() => {
+                  setIsAdding(false);
+                  setAddPosition(null);
+                }}>Cancel</button>
+                <button type="button" onClick={addElement} disabled={!elementName.trim()}>
+                  Add
+                </button>
+              </div>
+            </section>
           </div>
         )}
 
-        <p className="template-grid-hint">
-          {nestedParent
-            ? `Subbuttons for ${nestedParent.name}. Add a subbutton to make this a nested button. Select a button, then use Properties to edit it.`
-            : "Select a button to activate Properties. Select it again to manage its subbuttons. Drag buttons to arrange them."}
-        </p>
         <div
           className="template-grid-area">
         <div
@@ -450,7 +492,7 @@ export default function Template() {
                   moveElementToCell(cellIndex);
                 }}
               >
-                {element && (
+                {element ? (
                   <div
                     className="template-tile-wrap"
                     draggable
@@ -481,6 +523,26 @@ export default function Template() {
                       }
                     }}
                     onPointerCancel={() => setDraggedElementIndex(null)}
+                    onClick={() => {
+                      if (didPointerDrag.current) {
+                        didPointerDrag.current = false;
+                        lastElementClick.current = { id: null, time: 0 };
+                        return;
+                      }
+                      setActiveElementIndex(elementIndex);
+                      const now = Date.now();
+                      const isDoubleClick =
+                        lastElementClick.current.id === element.id &&
+                        now - lastElementClick.current.time < 500;
+                      lastElementClick.current = { id: element.id, time: now };
+
+                      if (isDoubleClick && !nestedParent && isNestedElement(element)) {
+                        lastElementClick.current = { id: null, time: 0 };
+                        setNestedParentId(element.id);
+                        setActiveElementIndex(null);
+                        setIsAdding(false);
+                      }
+                    }}
                   >
                     <button
                       className={`template-action-tile${activeElementIndex === elementIndex ? " is-active" : ""}`}
@@ -491,40 +553,27 @@ export default function Template() {
                         fontFamily: element.fontFamily || "Arial, sans-serif"
                       }}
                       aria-pressed={activeElementIndex === elementIndex}
-                      aria-label={nestedParent ? element.name : `${element.name}${element.children?.length ? ", has subbuttons" : ""}`}
-                      onClick={() => {
-                        if (didPointerDrag.current) {
-                          didPointerDrag.current = false;
-                          return;
-                        }
-                        if (
-                          !nestedParent &&
-                          activeElementIndex === elementIndex
-                        ) {
-                          setElements(currentElementsState => currentElementsState.map(currentElement =>
-                            currentElement.id === element.id
-                              ? {
-                                  ...currentElement,
-                                  children: currentElement.children || [],
-                                  childrenColumns: currentElement.childrenColumns ?? Number(columns),
-                                  childrenRowHeightLines: currentElement.childrenRowHeightLines ?? Number(rowHeightLines)
-                                }
-                              : currentElement
-                          ));
-                          setNestedParentId(element.id);
-                          setActiveElementIndex(null);
-                          setIsAdding(false);
-                          return;
-                        }
-                        setActiveElementIndex(elementIndex);
-                      }}
+                      aria-label={nestedParent ? element.name : `${element.name}${isNestedElement(element) ? ", has subbuttons" : ""}`}
                     >
                       {element.name}
                     </button>
-                    {element.children?.length > 0 && (
+                    {isNestedElement(element) && (
                       <span className="template-nested-marker" aria-hidden="true" />
                     )}
                   </div>
+                ) : (
+                  <button
+                    className="template-action-tile grid-add-cell"
+                    type="button"
+                    aria-label={`Add button in empty cell ${cellIndex + 1}`}
+                    onClick={() => {
+                      setAddPosition(cellIndex);
+                      setElementName("");
+                      setIsAdding(true);
+                    }}
+                  >
+                    &lt;Add&gt;
+                  </button>
                 )}
               </div>
             );
@@ -533,15 +582,26 @@ export default function Template() {
         </div>
         <div className="template-button-actions">
           <button
-            className="template-add-button"
+            className="template-delete-button"
             type="button"
-            onClick={() => {
-              setIsAdding(true);
-              setElementName("");
-            }}
+            disabled={activeElementIndex === null}
+            onClick={deleteActiveElement}
           >
-            + Add button
+            Delete
           </button>
+          {!hasEmptyGridCell && (
+            <button
+              className="template-add-button"
+              type="button"
+              onClick={() => {
+                setAddPosition(null);
+                setElementName("");
+                setIsAdding(true);
+              }}
+            >
+              &lt;Add&gt;
+            </button>
+          )}
           <button
             className="template-properties-button"
             type="button"
@@ -561,14 +621,6 @@ export default function Template() {
             }}
           >
             Properties
-          </button>
-          <button
-            className="template-delete-button"
-            type="button"
-            disabled={activeElementIndex === null}
-            onClick={deleteActiveElement}
-          >
-            Delete
           </button>
         </div>
 
@@ -605,41 +657,23 @@ export default function Template() {
                   defaultCount: event.target.value === "" ? "" : Number(event.target.value)
                 })}
               />
-              <section className="nested-button-editor" aria-label="Subbuttons">
-                <h3>Subbuttons</h3>
-                <p>Adding subbuttons marks this as a nested button. Subbuttons are the final level.</p>
-                {(editingElement.children || []).map((child, index) => (
-                  <div className="nested-button-row" key={`${index}-${child.name}`}>
-                    <span
-                      className="nested-button-preview"
-                      style={{
-                        backgroundColor: child.backgroundColor || "#dedede",
-                        color: child.textColor || "#111111",
-                        fontFamily: child.fontFamily || "Arial, sans-serif"
-                      }}
-                    >
-                      {child.name}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Edit subbutton ${index + 1}`}
-                      onClick={() => setEditingSubbuttonIndex(index)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Remove subbutton ${index + 1}`}
-                      onClick={() => removeSubbutton(editingElement.id, index)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-                <button type="button" onClick={() => addSubbutton(editingElement.id)}>
-                  + Add subbutton
+              {isNestedElement(editingElement) ? (
+                <button type="button" onClick={() => unnestElement(editingElement.id)}>
+                  Unnest
                 </button>
-              </section>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => updateElement(editingElement.id, {
+                    isNested: true,
+                    children: [],
+                    childrenColumns: Number(columns),
+                    childrenRowHeightLines: Number(rowHeightLines)
+                  })}
+                >
+                  Nest
+                </button>
+              )}
               <div className="color-settings">
                 <label htmlFor="element-background">Button color</label>
                 <input
@@ -751,9 +785,6 @@ export default function Template() {
           </div>
         )}
       </form>
-      <section className="template-preview" aria-label="Capture preview">
-        The recorded observation log is shown in this space during capture.
-      </section>
     </main>
   );
 }

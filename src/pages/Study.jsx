@@ -30,6 +30,7 @@ export default function Study() {
   const [ selectedEventTarget, setSelectedEventTarget ] = useState(null);
   const [ isAddingElement, setIsAddingElement ] = useState(false);
   const [ newElementName, setNewElementName ] = useState("");
+  const [ addPosition, setAddPosition ] = useState(null);
   const observationLogRef = useRef(null);
 
   useEffect(() => {
@@ -119,8 +120,11 @@ export default function Study() {
     const occupiedPositions = new Set(visibleElements.map((element, index) =>
       Number.isInteger(element.position) && element.position >= 0 ? element.position : index
     ));
-    let position = 0;
-    while (occupiedPositions.has(position)) position += 1;
+    let position = addPosition;
+    if (position === null || occupiedPositions.has(position)) {
+      position = 0;
+      while (occupiedPositions.has(position)) position += 1;
+    }
 
     const existingIds = (template.elements || []).flatMap(element => [
       Number(element.id),
@@ -147,6 +151,7 @@ export default function Study() {
       setNestedParent(updatedElements.find(element => element.id === nestedParent.id));
     }
     setNewElementName("");
+    setAddPosition(null);
     setIsAddingElement(false);
     setSelectedEventTarget(null);
     if (timestamp !== null) {
@@ -217,6 +222,7 @@ export default function Study() {
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index,
     element
   ]));
+  const hasEmptyGridCell = elementsByPosition.size < gridRows * columns;
   const gridStyle = {
     gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(${gridRows}, ${rowHeight}px)`
@@ -305,9 +311,9 @@ export default function Study() {
                   role="gridcell"
                   aria-label={element ? element.name : `Empty cell ${cellIndex + 1}`}
                 >
-                  {element && (
+                  {element ? (
                     <button
-                      className={`study-action-tile${!nestedParent && element.children?.length > 0 ? " is-nested" : ""}`}
+                      className={`study-action-tile${!nestedParent && (element.isNested || element.children?.length > 0) ? " is-nested" : ""}`}
                       disabled={timestamp === null && !selectedEventTarget}
                       type="button"
                       style={{
@@ -316,7 +322,7 @@ export default function Study() {
                         fontFamily: element.fontFamily || "Arial, sans-serif"
                       }}
                       onClick={() => {
-                        if (!nestedParent && element.children?.length > 0) {
+                        if (!nestedParent && (element.isNested || element.children?.length > 0)) {
                           setNestedParent(element);
                           return;
                         }
@@ -329,22 +335,24 @@ export default function Study() {
                     >
                       {element.name}
                     </button>
+                  ) : (
+                    <button
+                      className="study-action-tile grid-add-cell"
+                      type="button"
+                      aria-label={`Add button in empty cell ${cellIndex + 1}`}
+                      onClick={() => {
+                        setAddPosition(cellIndex);
+                        setNewElementName("");
+                        setIsAddingElement(true);
+                      }}
+                    >
+                      &lt;Add&gt;
+                    </button>
                   )}
                 </div>
               );
             })}
           </div>
-          <button
-            className="template-add-button study-add-button"
-            type="button"
-            onClick={() => {
-              setNewElementName("");
-              setIsAddingElement(true);
-            }}
-          >
-            + Add button
-          </button>
-          {currentElements.length === 0 && <p>This template has no action buttons.</p>}
           <section
             className={`study-observation-log${timestamp !== null ? " is-recording" : ""}`}
             aria-label="Recorded observation log"
@@ -361,6 +369,19 @@ export default function Study() {
                 <h2>Observation log</h2>
                 {selectedEventTarget && <span>Select a button to replace this action</span>}
               </div>
+              {!hasEmptyGridCell && (
+                <button
+                  className="observation-log-add"
+                  type="button"
+                  onClick={() => {
+                    setAddPosition(null);
+                    setNewElementName("");
+                    setIsAddingElement(true);
+                  }}
+                >
+                  &lt;Add&gt;
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => navigate(`/Results?templateId=${encodeURIComponent(template.id)}&subjectNumber=${selectedSubjectNumber}`)}
@@ -475,7 +496,10 @@ export default function Study() {
             {isAddingElement && (
               <div
                 className="study-note-backdrop"
-                onClick={() => setIsAddingElement(false)}
+                onClick={() => {
+                  setIsAddingElement(false);
+                  setAddPosition(null);
+                }}
               >
                 <form
                   className="study-note-dialog"
@@ -496,7 +520,10 @@ export default function Study() {
                     placeholder="Enter an element name"
                   />
                   <div className="study-note-dialog-actions">
-                    <button type="button" onClick={() => setIsAddingElement(false)}>
+                    <button type="button" onClick={() => {
+                      setIsAddingElement(false);
+                      setAddPosition(null);
+                    }}>
                       Cancel
                     </button>
                     <button type="submit" disabled={!newElementName.trim()}>

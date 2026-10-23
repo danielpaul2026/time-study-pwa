@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import enVistaLogo from "../assets/enVista_Logo_Color.png";
-import { getStudySessions, getTemplates, saveTemplate } from "../data/studyStore";
+import { deleteTemplate, getStudySessions, getTemplates, saveTemplate } from "../data/studyStore";
 
 function formatDuration(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -54,8 +54,9 @@ function isTemplateFile(value) {
 export default function Menu() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
+    const moreMenuRef = useRef(null);
     const [ templates, setTemplates ] = useState(() => getTemplates());
-    const [ sessions ] = useState(() => getStudySessions());
+    const [ sessions, setSessions ] = useState(() => getStudySessions());
     const [ selectedTemplateId, setSelectedTemplateId ] = useState("");
     const selectedTemplate = templates.find(template => template.id === selectedTemplateId);
     const selectedSessions = sessions.filter(session => session.templateId === selectedTemplateId);
@@ -92,6 +93,7 @@ export default function Menu() {
             saveTemplate(template);
             setTemplates(currentTemplates => [ ...currentTemplates, template ]);
             setSelectedTemplateId(id);
+            moreMenuRef.current.open = false;
         } catch (error) {
             window.alert(error instanceof Error
                 ? `Unable to import template: ${error.message}`
@@ -99,18 +101,10 @@ export default function Menu() {
         }
     }
 
-    async function shareTemplate() {
-        if (!selectedTemplate) return;
-
-        const file = new File(
-            [ JSON.stringify(selectedTemplate, null, 2) ],
-            `${selectedTemplate.name.replace(/[^a-z0-9-_]+/gi, "-") || "study-template"}.json`,
-            { type: "application/json" }
-        );
-
+    async function shareFile(file, title) {
         try {
             if (navigator.share && navigator.canShare?.({ files: [ file ] })) {
-                await navigator.share({ title: selectedTemplate.name, files: [ file ] });
+                await navigator.share({ title, files: [ file ] });
                 return;
             }
 
@@ -123,9 +117,44 @@ export default function Menu() {
         } catch (error) {
             if (error instanceof DOMException && error.name === "AbortError") return;
             window.alert(error instanceof Error
-                ? `Unable to share template: ${error.message}`
-                : "Unable to share template.");
+                ? `Unable to share ${title}: ${error.message}`
+                : `Unable to share ${title}.`);
         }
+    }
+
+    function createExportFile(data, fileName, type) {
+        return new File([ JSON.stringify(data, null, 2) ], fileName, { type });
+    }
+
+    async function shareTemplate() {
+        if (!selectedTemplate) return;
+        const fileName = `${selectedTemplate.name.replace(/[^a-z0-9-_]+/gi, "-") || "study-template"}.json`;
+        const file = createExportFile(selectedTemplate, fileName, "application/json");
+        await shareFile(file, selectedTemplate.name);
+        moreMenuRef.current.open = false;
+    }
+
+    async function shareData() {
+        if (!selectedTemplate) return;
+        const templateSessions = sessions.filter(session => session.templateId === selectedTemplate.id);
+        const fileName = `${selectedTemplate.name.replace(/[^a-z0-9-_]+/gi, "-") || "study"}-data.json`;
+        const file = createExportFile({
+            templateId: selectedTemplate.id,
+            templateName: selectedTemplate.name,
+            sessions: templateSessions
+        }, fileName, "application/json");
+        await shareFile(file, `${selectedTemplate.name} study data`);
+        moreMenuRef.current.open = false;
+    }
+
+    function removeSelectedTemplate() {
+        if (!selectedTemplate) return;
+        if (!window.confirm(`Warning: This will permanently delete the "${selectedTemplate.name}" template and all of its associated study data. This cannot be undone. Continue?`)) return;
+
+        deleteTemplate(selectedTemplate.id);
+        setTemplates(currentTemplates => currentTemplates.filter(template => template.id !== selectedTemplate.id));
+        setSessions(currentSessions => currentSessions.filter(session => session.templateId !== selectedTemplate.id));
+        setSelectedTemplateId("");
     }
 
     return (
@@ -161,8 +190,25 @@ export default function Menu() {
                     >
                         Edit
                     </button>
-                    <button type="button" onClick={() => fileInputRef.current?.click()}>Import</button>
-                    <button type="button" disabled={!selectedTemplate} onClick={shareTemplate}>Share</button>
+                    <button
+                        className="menu-delete-template"
+                        type="button"
+                        disabled={!selectedTemplate}
+                        onClick={removeSelectedTemplate}
+                    >
+                        Delete
+                    </button>
+                    <details className="menu-more" ref={moreMenuRef}>
+                        <summary>More...</summary>
+                        <div className="menu-more-options">
+                            <button type="button" onClick={() => {
+                                moreMenuRef.current.open = false;
+                                fileInputRef.current?.click();
+                            }}>Import</button>
+                            <button type="button" disabled={!selectedTemplate} onClick={shareTemplate}>Share Template</button>
+                            <button type="button" disabled={!selectedTemplate} onClick={shareData}>Share Data</button>
+                        </div>
+                    </details>
                     <input
                         ref={fileInputRef}
                         className="menu-import-input"
