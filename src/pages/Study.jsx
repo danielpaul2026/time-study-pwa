@@ -25,6 +25,7 @@ export default function Study() {
   const [ actionEvents, setActionEvents ] = useState([]);
   const [ clockNow, setClockNow ] = useState(0);
   const [ studySessions, setStudySessions ] = useState(() => getStudySessions());
+  const [ nestedParent, setNestedParent ] = useState(null);
 
   useEffect(() => {
     if (timestamp === null) return undefined;
@@ -100,7 +101,8 @@ export default function Study() {
 
   const columns = Math.max(1, Math.min(12, Number(template?.columns) || 3));
   const rowHeightLines = Math.max(1, Math.min(8, Number(template?.rowHeightLines) || 2));
-  const elementPositions = (template?.elements || []).map((element, index) =>
+  const currentElements = nestedParent?.children || template?.elements || [];
+  const elementPositions = currentElements.map((element, index) =>
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index
   );
   const minimumGridRows = Math.max(
@@ -109,7 +111,7 @@ export default function Study() {
   );
   const rowHeight = Math.max(44, rowHeightLines * 16.1 + 16);
   const { gridRef, gridRows } = useAvailableGridRows(minimumGridRows, rowHeight);
-  const elementsByPosition = new Map((template?.elements || []).map((element, index) => [
+  const elementsByPosition = new Map(currentElements.map((element, index) => [
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index,
     element
   ]));
@@ -140,10 +142,14 @@ export default function Study() {
       {template ? (
         <>
           <header className="study-appbar">
-            <button className="study-menu-button" type="button" onClick={() => navigate("/")}>
-              Menu
+            <button
+              className="study-menu-button"
+              type="button"
+              onClick={() => nestedParent ? setNestedParent(null) : navigate("/")}
+            >
+              {nestedParent ? "Back" : "Menu"}
             </button>
-            <h1>{template.name}</h1>
+            <h1>{nestedParent?.name || template.name}</h1>
             <button
               className={`record-button${timestamp !== null ? " is-recording" : ""}`}
               type="button"
@@ -171,7 +177,13 @@ export default function Study() {
               ))}
             </select>
           </section>
-          <div ref={gridRef} className="study-action-grid" role="grid" aria-label="Study actions" style={gridStyle}>
+          <div
+            ref={gridRef}
+            className="study-action-grid"
+            role="grid"
+            aria-label={nestedParent ? `${nestedParent.name} subbuttons` : "Study actions"}
+            style={gridStyle}
+          >
             {Array.from({ length: gridRows * columns }, (_, cellIndex) => {
               const element = elementsByPosition.get(cellIndex);
               return (
@@ -183,7 +195,7 @@ export default function Study() {
                 >
                   {element && (
                     <button
-                      className="study-action-tile"
+                      className={`study-action-tile${!nestedParent && element.children?.length > 0 ? " is-nested" : ""}`}
                       disabled={timestamp === null}
                       type="button"
                       style={{
@@ -191,7 +203,15 @@ export default function Study() {
                         color: element.textColor || "#111111",
                         fontFamily: element.fontFamily || "Arial, sans-serif"
                       }}
-                      onClick={() => recordAction(element)}
+                      onClick={() => {
+                        if (!nestedParent && element.children?.length > 0) {
+                          setNestedParent(element);
+                          return;
+                        }
+
+                        recordAction(element);
+                        setNestedParent(null);
+                      }}
                     >
                       {element.name}
                     </button>
@@ -208,7 +228,7 @@ export default function Study() {
           >
             &lt; Add &gt;
           </button>
-          {template.elements.length === 0 && <p>This template has no action buttons.</p>}
+          {currentElements.length === 0 && <p>This template has no action buttons.</p>}
           <section className="study-observation-log" aria-label="Recorded observation log">
             <div className="study-readout" role="status">
               <span>{timestamp !== null ? "RECORDING" : duration !== null ? "SAVED" : "READY"}</span>

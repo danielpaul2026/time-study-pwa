@@ -3,12 +3,14 @@ import { useEffect, useRef, useState } from "react";
 export default function useAvailableGridRows(minimumRows, rowHeight) {
   const gridRef = useRef(null);
   const [ availableRows, setAvailableRows ] = useState(0);
+  const [ availableHeight, setAvailableHeight ] = useState(0);
 
   useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return undefined;
 
     const observer = new ResizeObserver(([entry]) => {
+      setAvailableHeight(entry.contentRect.height);
       const rowGap = Number.parseFloat(window.getComputedStyle(grid).rowGap) || 0;
       const rows = Math.floor(
         (entry.contentRect.height + rowGap) / (rowHeight + rowGap)
@@ -22,6 +24,8 @@ export default function useAvailableGridRows(minimumRows, rowHeight) {
 
   return {
     gridRef,
+    availableRows,
+    availableHeight,
     gridRows: Math.max(minimumRows, availableRows)
   };
 }

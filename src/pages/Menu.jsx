@@ -38,7 +38,16 @@ function isTemplateFile(value) {
         value.elements.every(element =>
             element !== null &&
             typeof element === "object" &&
-            typeof element.name === "string"
+            typeof element.name === "string" &&
+            (element.children === undefined ||
+                (Array.isArray(element.children) &&
+                    element.children.every(child =>
+                        child !== null &&
+                        typeof child === "object" &&
+                        typeof child.name === "string" &&
+                        (child.children === undefined ||
+                            (Array.isArray(child.children) && child.children.length === 0))
+                    )))
         );
 }
 

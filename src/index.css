@@ -175,7 +175,8 @@ input {
   font-weight: 600;
 }
 
-.template-grid-settings input {
+.template-grid-settings input,
+.template-grid-settings select {
   width: 100%;
   min-width: 0;
   min-height: 38px;
@@ -200,6 +201,18 @@ input {
   align-content: start;
 }
 
+.template-grid-area {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.template-action-grid {
+  overflow: hidden;
+}
+
 .template-grid-cell,
 .study-grid-cell {
   display: grid;
@@ -208,6 +221,10 @@ input {
   min-height: 44px;
   overflow: hidden;
   border: 1px dotted #a3adb3;
+}
+
+.template-grid-cell {
+  min-height: 0;
 }
 
 .template-grid-cell.is-empty,
@@ -228,7 +245,7 @@ input {
   width: 100%;
   height: 100%;
   min-height: 0;
-  padding: 7px 8px;
+  padding: 2px 4px;
   border: 0;
   border-radius: 0;
   background: #e5e5e5;
@@ -242,7 +259,11 @@ input {
   touch-action: manipulation;
 }
 
-.template-edit-marker {
+.template-action-tile.is-active {
+  box-shadow: inset 0 0 0 3px #1069a5;
+}
+
+.template-nested-marker {
   position: absolute;
   top: 0;
   right: 0;
@@ -251,6 +272,50 @@ input {
   border-top: 7px solid #171717;
   border-left: 7px solid transparent;
   pointer-events: none;
+}
+
+.nested-button-editor {
+  display: grid;
+  gap: 8px;
+}
+
+.nested-button-editor h3,
+.nested-button-editor p {
+  margin: 0;
+}
+
+.nested-button-editor h3 {
+  font-size: 15px;
+}
+
+.nested-button-editor p {
+  color: #59656c;
+  font-size: 12px;
+}
+
+.nested-button-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+}
+
+.nested-button-preview {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #aab0b4;
+  border-radius: 5px;
+  overflow-wrap: anywhere;
+}
+
+.subbutton-editor-backdrop {
+  z-index: 11;
+}
+
+.nested-button-row input {
+  width: 100%;
+  min-width: 0;
 }
 
 .template-grid-cell.is-dragging .template-tile-wrap {
@@ -269,10 +334,27 @@ input {
   cursor: pointer;
 }
 
+.template-button-actions {
+  display: flex;
+  gap: 8px;
+  margin: 0 8px 8px;
+}
+
+.template-add-button,
+.template-properties-button,
+.template-delete-button {
+  flex: 1;
+  min-width: 0;
+}
+
 .template-add-button {
   display: block;
-  width: calc(100% - 16px);
-  margin: 0 8px 8px;
+}
+
+.template-properties-button:disabled,
+.template-delete-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .element-form {
@@ -303,6 +385,9 @@ input {
   width: 100%;
   max-width: 480px;
   margin: 0 auto;
+  max-height: 90vh;
+  max-height: 90dvh;
+  overflow-y: auto;
   padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
   border-radius: 10px 10px 0 0;
   background: #fff;
@@ -477,6 +562,7 @@ input {
 }
 
 .study-action-tile {
+  position: relative;
   display: grid;
   place-items: center;
   width: 100%;
@@ -493,6 +579,18 @@ input {
   text-align: center;
   overflow-wrap: anywhere;
   touch-action: manipulation;
+}
+
+.study-action-tile.is-nested::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-top: 10px solid #171717;
+  border-left: 10px solid transparent;
+  content: "";
+  pointer-events: none;
 }
 
 .study-action-tile:active:not(:disabled) {
