@@ -4,7 +4,9 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 
 ## Features
 - enVista-branded menu with selectable templates and per-template study summaries
-- template import, template/data sharing, and warning-confirmed template deletion from the Menu action bar
+- import templates from JSON files under Menu > More
+- export/share a selected template as JSON and study data as an Excel workbook with a sheet for each populated subject, using the browser's share sheet when available or downloading the file for sharing
+- warning-confirmed template deletion from the Menu action bar
 - stopwatch action reserved for a future feature
 - configurable template grid columns and row height
 - empty grid cells on Template and Study display an Add control for creating buttons in place; when a grid is full, Add moves to the adjacent action bar

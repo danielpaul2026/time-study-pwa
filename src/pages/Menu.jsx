@@ -2,6 +2,10 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import enVistaLogo from "../assets/enVista_Logo_Color.png";
 import {
+  createStudyExportFilename,
+  createStudyWorkbook
+} from "../data/studyExport.js";
+import {
   deleteTemplate,
   getStudySessions,
   getTemplates,
@@ -77,6 +81,7 @@ export default function Menu() {
             ? getVisibleStudyEvents(session.events).filter(({ event }) => event.type !== "gap").length
             : 0), 0
     );
+
     async function importTemplate(event) {
         const file = event.target.files?.[0];
         event.target.value = "";
@@ -107,24 +112,43 @@ export default function Menu() {
         }
     }
 
+    function downloadFile(file, fileName = file.name) {
+        const url = URL.createObjectURL(file);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        link.style.display = "none";
+        document.body.append(link);
+        link.click();
+        link.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
     async function shareFile(file, title) {
-        try {
-            if (navigator.share && navigator.canShare?.({ files: [ file ] })) {
+        if (navigator.share && navigator.canShare?.({ files: [ file ] })) {
+            try {
                 await navigator.share({ title, files: [ file ] });
                 return;
+            } catch (error) {
+                if (error instanceof DOMException && error.name === "AbortError") return;
+                try {
+                    downloadFile(file);
+                    return;
+                } catch (downloadError) {
+                    window.alert(downloadError instanceof Error
+                        ? `Unable to export ${title}: ${downloadError.message}`
+                        : `Unable to export ${title}.`);
+                    return;
+                }
             }
+        }
 
-            const url = URL.createObjectURL(file);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = file.name;
-            link.click();
-            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        try {
+            downloadFile(file);
         } catch (error) {
-            if (error instanceof DOMException && error.name === "AbortError") return;
             window.alert(error instanceof Error
-                ? `Unable to share ${title}: ${error.message}`
-                : `Unable to share ${title}.`);
+                ? `Unable to export ${title}: ${error.message}`
+                : `Unable to export ${title}.`);
         }
     }
 
@@ -140,17 +164,28 @@ export default function Menu() {
         moreMenuRef.current.open = false;
     }
 
-    async function shareData() {
+    function exportData() {
         if (!selectedTemplate) return;
         const templateSessions = sessions.filter(session => session.templateId === selectedTemplate.id);
-        const fileName = `${selectedTemplate.name.replace(/[^a-z0-9-_]+/gi, "-") || "study"}-data.json`;
-        const file = createExportFile({
-            templateId: selectedTemplate.id,
-            templateName: selectedTemplate.name,
-            sessions: templateSessions
-        }, fileName, "application/json");
-        await shareFile(file, `${selectedTemplate.name} study data`);
-        moreMenuRef.current.open = false;
+        if (templateSessions.length === 0) {
+            window.alert(`There is no study data to export for "${selectedTemplate.name}".`);
+            moreMenuRef.current.open = false;
+            return;
+        }
+
+        try {
+            const workbook = createStudyWorkbook(templateSessions);
+            const fileName = createStudyExportFilename(selectedTemplate.name, templateSessions);
+            const file = new Blob([ workbook ], {
+                type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            });
+            downloadFile(file, fileName);
+            moreMenuRef.current.open = false;
+        } catch (error) {
+            window.alert(error instanceof Error
+                ? `Unable to export ${selectedTemplate.name} study data: ${error.message}`
+                : `Unable to export ${selectedTemplate.name} study data.`);
+        }
     }
 
     function removeSelectedTemplate() {
@@ -210,9 +245,9 @@ export default function Menu() {
                             <button type="button" onClick={() => {
                                 moreMenuRef.current.open = false;
                                 fileInputRef.current?.click();
-                            }}>Import</button>
-                            <button type="button" disabled={!selectedTemplate} onClick={shareTemplate}>Share Template</button>
-                            <button type="button" disabled={!selectedTemplate} onClick={shareData}>Share Data</button>
+                            }}>Import Template</button>
+                            <button type="button" disabled={!selectedTemplate} onClick={shareTemplate}>Export Template</button>
+                            <button type="button" disabled={!selectedTemplate} onClick={exportData}>Export Data</button>
                         </div>
                     </details>
                     <input

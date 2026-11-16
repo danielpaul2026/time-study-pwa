@@ -7,10 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "test:store": "node --test tests/studyStore.test.js",
+    "test:store": "node --test tests/studyStore.test.js tests/studyExport.test.js",
     "preview": "vite preview"
   },
   "dependencies": {
+    "fflate": "^0.8.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4"
