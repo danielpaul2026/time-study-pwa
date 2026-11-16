@@ -17,6 +17,7 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 - ten numbered subjects are always available for each template, and repeated studies continue adding to that subject's data
 - the study preview and results show a subject's previous runs, with a gap marker when recording resumes
 - the observation log is chronological; action counts and notes remain editable after recording, and selecting an action then a template button replaces its element without interrupting capture
+- the Study and Results screens support merging sequential actions; merges keep the destination action and count, append source notes under `Merged:`, and retain the earlier timestamp, while original events remain stored so merges can be undone later from Results
 - the study screen can add named buttons directly to the template; during capture, the new action is recorded only after confirming its name
 - results display one template and subject at a time, with separate subject- and template-scoped clearing
 - results show all selected subject actions in one export-ready table with element details, notes, counts, dates, timestamps, elapsed time, and study number

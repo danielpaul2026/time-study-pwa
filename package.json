@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "test:store": "node --test tests/studyStore.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

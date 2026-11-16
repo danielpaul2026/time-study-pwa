@@ -229,6 +229,34 @@ input {
   overflow: hidden;
 }
 
+.study-log-resize-handle {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 0 0 14px;
+  place-items: center;
+  min-height: 14px;
+  border-top: 1px solid #c5cdd1;
+  border-bottom: 1px solid #c5cdd1;
+  background: #e4e9ec;
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.study-log-resize-handle::before {
+  width: 52px;
+  height: 4px;
+  border-radius: 2px;
+  background: #718996;
+  content: "";
+}
+
+.study-log-resize-handle:hover,
+.study-log-resize-handle:focus-visible {
+  background: #d3e2e9;
+}
+
 .template-grid-cell,
 .study-grid-cell {
   display: grid;
@@ -401,6 +429,34 @@ input {
   grid-template-columns: 1fr 54px;
   align-items: center;
   gap: 8px;
+}
+
+.text-style-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.text-style-controls input[type="number"] {
+  width: 100%;
+  min-height: 46px;
+  padding: 8px 10px;
+  border: 1px solid #87939a;
+  border-radius: 5px;
+  background: #fff;
+  color: #16191c;
+  font: inherit;
+}
+
+.text-style-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #16191c;
+}
+
+.text-style-controls input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
 }
 
 .color-settings input[type="color"] {
@@ -672,9 +728,34 @@ input {
   background: #f8fafb;
 }
 
+.results-data-table tbody tr:not(.results-gap-row) {
+  cursor: pointer;
+}
+
+.results-data-table tbody tr.is-selected {
+  background: #fff3c8;
+  box-shadow: inset 3px 0 #d99b00;
+}
+
+.results-data-table tbody tr:focus-visible {
+  outline: 3px solid #f0a521;
+  outline-offset: -3px;
+}
+
 .results-data-table td:nth-child(5) {
   min-width: 160px;
   white-space: normal;
+}
+
+.results-id-cell {
+  white-space: nowrap;
+}
+
+.results-merged-indicator {
+  margin-left: 6px;
+  color: #a0a8ad;
+  font-size: 10px;
+  font-weight: 400;
 }
 
 .results-gap-row td {
@@ -682,6 +763,154 @@ input {
   color: #737d83;
   font-style: italic;
   text-align: center;
+}
+
+.results-table-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 8px 0 0;
+  color: #526876;
+  font-size: 12px;
+}
+
+.results-table-actions button {
+  min-height: 36px;
+  padding: 5px 12px;
+  border-color: #0b5686;
+  background: #0b5686;
+  color: #fff;
+  font-size: 12px;
+}
+
+.results-merge-backdrop {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 16px;
+  background: rgb(10 22 30 / 48%);
+}
+
+.results-merge-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 560px);
+  max-height: 85vh;
+  max-height: 85dvh;
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid #c5d0d7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 22%);
+}
+
+.results-merge-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.results-merge-dialog h2,
+.results-merge-dialog h3 {
+  margin: 0;
+  color: #17364b;
+}
+
+.results-merge-dialog h2 {
+  font-size: 17px;
+}
+
+.results-merge-dialog h3 {
+  font-size: 14px;
+}
+
+.results-merge-dialog > header strong {
+  display: block;
+  margin-top: 5px;
+  color: #59656c;
+  font-size: 13px;
+}
+
+.results-merge-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.results-merge-options h3 {
+  grid-column: 1 / -1;
+}
+
+.results-merge-options button {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  text-align: left;
+}
+
+.results-merge-options button > span {
+  display: grid;
+  min-width: 0;
+}
+
+.results-merge-options button > span > span {
+  color: #59656c;
+  font-size: 11px;
+}
+
+.results-merge-options button strong {
+  overflow: hidden;
+  color: #17364b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.results-merge-options button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: #1769a1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.results-unmerge-options {
+  display: grid;
+  gap: 8px;
+}
+
+.results-unmerge-options > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid #d9e0e4;
+  border-radius: 5px;
+  color: #39464e;
+  font-size: 13px;
+}
+
+.results-unmerge-options > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.results-unmerge-options button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 .study-subject-controls span {
@@ -811,6 +1040,7 @@ input {
 }
 
 .study-observation-log {
+  position: relative;
   display: flex;
   flex: 0 0 218px;
   flex-direction: column;
@@ -997,6 +1227,102 @@ input {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.5;
+}
+
+.study-merge-overlay {
+  position: absolute;
+  z-index: 12;
+  inset: 0;
+  display: grid;
+  padding: 5px;
+  background: rgb(10 22 30 / 48%);
+}
+
+.study-merge-dialog {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px 10px;
+  border: 1px solid #c5d0d7;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 20%);
+}
+
+.study-merge-dialog h2 {
+  margin: 0;
+  color: #17364b;
+  font-size: 12px;
+}
+
+.study-merge-source,
+.study-merge-options {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+.study-merge-source strong,
+.study-merge-options button strong {
+  overflow: hidden;
+  color: #17364b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-merge-source span,
+.study-merge-source small {
+  color: #59656c;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.study-merge-options button {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 3px 6px;
+  text-align: left;
+}
+
+.study-merge-options button > span {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.study-merge-options button > span > span,
+.study-merge-options button small {
+  color: #59656c;
+  font-size: 10px;
+}
+
+.study-merge-options button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #1769a1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.study-merge-cancel {
+  grid-column: 1;
+  justify-self: start;
+  min-height: 30px;
+  padding: 3px 10px;
+  color: #39464e;
+  font-size: 11px;
 }
 
 .study-note-backdrop {

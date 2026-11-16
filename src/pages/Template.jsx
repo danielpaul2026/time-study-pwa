@@ -14,14 +14,6 @@ const defaultColors = [
   "#9bdde5"
 ];
 
-const fontOptions = [
-  { label: "Arial", value: "Arial, sans-serif" },
-  { label: "Verdana", value: "Verdana, sans-serif" },
-  { label: "Trebuchet MS", value: "Trebuchet MS, sans-serif" },
-  { label: "Georgia", value: "Georgia, serif" },
-  { label: "Courier New", value: "Courier New, monospace" }
-];
-
 function normalizePositions(elements, cellCount) {
   const positions = new Set();
   let nextFreePosition = 0;
@@ -51,6 +43,19 @@ function isNestedElement(element) {
   return element.isNested === true || element.children?.length > 0;
 }
 
+function getTextStyle(element = {}) {
+  const fontSize = Number.isFinite(Number(element.fontSize)) ? Number(element.fontSize) : 16;
+  const fontWeight = Number.isFinite(Number(element.fontWeight)) ? Number(element.fontWeight) : 400;
+  const fontStyle = element.fontStyle === "italic" ? "italic" : "normal";
+
+  return {
+    fontFamily: "Arial, sans-serif",
+    fontSize: `${fontSize}px`,
+    fontWeight,
+    fontStyle
+  };
+}
+
 export default function Template() {
   const { templateId } = useParams();
   const navigate = useNavigate();
@@ -72,6 +77,7 @@ export default function Template() {
   const [ showElementProperties, setShowElementProperties ] = useState(false);
   const [ nestedParentId, setNestedParentId ] = useState(null);
   const [ activeElementIndex, setActiveElementIndex ] = useState(null);
+  const elementPointerDrag = useRef(null);
   const didPointerDrag = useRef(false);
   const lastElementClick = useRef({ id: null, time: 0 });
   const [ nextElementId, setNextElementId ] = useState(() =>
@@ -110,7 +116,10 @@ export default function Template() {
         position,
         backgroundColor: defaultColors[(nextElementId - 1) % defaultColors.length],
         textColor: "#111111",
-        fontFamily: "Arial, sans-serif"
+        fontFamily: "Arial, sans-serif",
+        fontSize: 16,
+        fontWeight: 400,
+        fontStyle: "normal"
       };
 
       if (nestedParentId === null) return [ ...currentElements, newElement ];
@@ -203,14 +212,13 @@ export default function Template() {
     if (!showElementProperties) setEditingElementId(null);
   }
 
-  function moveElementToCell(targetCell) {
-    if (draggedElementIndex === null) return;
+  function moveElementToCell(targetCell, sourceIndex = draggedElementIndex) {
+    if (sourceIndex === null) return;
 
     markUnsaved();
     setElements(currentElements => {
       function moveInList(list) {
         const normalizedList = normalizePositions(list, gridRows * columnCount);
-        const sourceIndex = draggedElementIndex;
         const sourceElement = normalizedList[sourceIndex];
         if (!sourceElement) return normalizedList;
         const sourceCell = Number.isInteger(sourceElement.position) && sourceElement.position >= 0
@@ -238,7 +246,59 @@ export default function Template() {
         : element
       );
     });
-    setActiveElementIndex(draggedElementIndex);
+    setActiveElementIndex(sourceIndex);
+    setDraggedElementIndex(null);
+  }
+
+  function startElementPointerDrag(event, elementIndex, sourceCell) {
+    if (event.button !== 0) return;
+
+    didPointerDrag.current = false;
+    elementPointerDrag.current = {
+      pointerId: event.pointerId,
+      elementIndex,
+      sourceCell,
+      startX: event.clientX,
+      startY: event.clientY,
+      isDragging: false
+    };
+    setActiveElementIndex(elementIndex);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveElementPointerDrag(event) {
+    const pointerDrag = elementPointerDrag.current;
+    if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+
+    if (!pointerDrag.isDragging &&
+      Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY) >= 6
+    ) {
+      pointerDrag.isDragging = true;
+      setDraggedElementIndex(pointerDrag.elementIndex);
+    }
+  }
+
+  function endElementPointerDrag(event) {
+    const pointerDrag = elementPointerDrag.current;
+    if (!pointerDrag || pointerDrag.pointerId !== event.pointerId) return;
+
+    elementPointerDrag.current = null;
+    if (!pointerDrag.isDragging) return;
+
+    didPointerDrag.current = true;
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const targetCell = target?.closest("[data-cell-index]");
+    if (targetCell && Number(targetCell.dataset.cellIndex) !== pointerDrag.sourceCell) {
+      moveElementToCell(Number(targetCell.dataset.cellIndex), pointerDrag.elementIndex);
+      return;
+    }
+
+    setDraggedElementIndex(null);
+  }
+
+  function cancelElementPointerDrag(event) {
+    if (elementPointerDrag.current?.pointerId !== event.pointerId) return;
+    elementPointerDrag.current = null;
     setDraggedElementIndex(null);
   }
 
@@ -483,46 +543,17 @@ export default function Template() {
                 data-cell-index={cellIndex}
                 role="gridcell"
                 aria-label={element ? element.name : `Empty cell ${cellIndex + 1}`}
-                onDragOver={event => {
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                }}
-                onDrop={event => {
-                  event.preventDefault();
-                  moveElementToCell(cellIndex);
-                }}
               >
                 {element ? (
                   <div
                     className="template-tile-wrap"
-                    draggable
-                    onDragStart={event => {
-                      event.dataTransfer.setData("text/plain", String(element.id));
-                      event.dataTransfer.effectAllowed = "move";
-                      setActiveElementIndex(elementIndex);
-                      setDraggedElementIndex(elementIndex);
-                    }}
-                    onDragEnd={() => setDraggedElementIndex(null)}
                     onPointerDown={event => {
-                      if (event.pointerType === "mouse") return;
-                      didPointerDrag.current = false;
-                      setActiveElementIndex(elementIndex);
-                      event.currentTarget.setPointerCapture(event.pointerId);
-                      setDraggedElementIndex(elementIndex);
+                      startElementPointerDrag(event, elementIndex, cellIndex);
                     }}
-                    onPointerUp={event => {
-                      if (event.pointerType === "mouse") return;
-                      const target = document.elementFromPoint(event.clientX, event.clientY);
-                      const targetCell = target?.closest("[data-cell-index]");
-                      if (targetCell) {
-                        const sourceCell = event.currentTarget.parentElement?.dataset.cellIndex;
-                        didPointerDrag.current = Number(targetCell.dataset.cellIndex) !== Number(sourceCell);
-                        moveElementToCell(Number(targetCell.dataset.cellIndex));
-                      } else {
-                        setDraggedElementIndex(null);
-                      }
-                    }}
-                    onPointerCancel={() => setDraggedElementIndex(null)}
+                    onPointerMove={moveElementPointerDrag}
+                    onPointerUp={endElementPointerDrag}
+                    onPointerCancel={cancelElementPointerDrag}
+                    onLostPointerCapture={cancelElementPointerDrag}
                     onClick={() => {
                       if (didPointerDrag.current) {
                         didPointerDrag.current = false;
@@ -550,7 +581,7 @@ export default function Template() {
                       style={{
                         backgroundColor: element.backgroundColor || "#dedede",
                         color: element.textColor || "#111111",
-                        fontFamily: element.fontFamily || "Arial, sans-serif"
+                        ...getTextStyle(element)
                       }}
                       aria-pressed={activeElementIndex === elementIndex}
                       aria-label={nestedParent ? element.name : `${element.name}${isNestedElement(element) ? ", has subbuttons" : ""}`}
@@ -690,16 +721,49 @@ export default function Template() {
                   onChange={event => updateElement(editingElement.id, { textColor: event.target.value })}
                 />
               </div>
-              <label htmlFor="element-font">Font</label>
-              <select
-                id="element-font"
-                value={editingElement.fontFamily || "Arial, sans-serif"}
-                onChange={event => updateElement(editingElement.id, { fontFamily: event.target.value })}
-              >
-                {fontOptions.map(font => (
-                  <option key={font.value} value={font.value}>{font.label}</option>
-                ))}
-              </select>
+              <label htmlFor="element-text-size">Text Style</label>
+              <div className="text-style-controls">
+                <input
+                  id="element-text-size"
+                  type="number"
+                  min="8"
+                  max="72"
+                  step="1"
+                  value={Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16}
+                  onChange={event => updateElement(editingElement.id, {
+                    fontFamily: "Arial, sans-serif",
+                    fontSize: event.target.value === "" ? 16 : Number(event.target.value),
+                    fontWeight: editingElement.fontWeight && Number(editingElement.fontWeight) > 400 ? Number(editingElement.fontWeight) : 400,
+                    fontStyle: editingElement.fontStyle === "italic" ? "italic" : "normal"
+                  })}
+                />
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={Number(editingElement.fontWeight || 400) >= 600}
+                    onChange={event => updateElement(editingElement.id, {
+                      fontFamily: "Arial, sans-serif",
+                      fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
+                      fontWeight: event.target.checked ? 700 : 400,
+                      fontStyle: editingElement.fontStyle === "italic" ? "italic" : "normal"
+                    })}
+                  />
+                  Bold
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={editingElement.fontStyle === "italic"}
+                    onChange={event => updateElement(editingElement.id, {
+                      fontFamily: "Arial, sans-serif",
+                      fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
+                      fontWeight: Number(editingElement.fontWeight || 400),
+                      fontStyle: event.target.checked ? "italic" : "normal"
+                    })}
+                  />
+                  Italic
+                </label>
+              </div>
               <button type="button" onClick={closeElementEditor}>
                 Done
               </button>
@@ -766,18 +830,49 @@ export default function Template() {
                   })}
                 />
               </div>
-              <label htmlFor="subbutton-font">Font</label>
-              <select
-                id="subbutton-font"
-                value={editingSubbutton.fontFamily || "Arial, sans-serif"}
-                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                  fontFamily: event.target.value
-                })}
-              >
-                {fontOptions.map(font => (
-                  <option key={font.value} value={font.value}>{font.label}</option>
-                ))}
-              </select>
+              <label htmlFor="subbutton-text-size">Text Style</label>
+              <div className="text-style-controls">
+                <input
+                  id="subbutton-text-size"
+                  type="number"
+                  min="8"
+                  max="72"
+                  step="1"
+                  value={Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16}
+                  onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                    fontFamily: "Arial, sans-serif",
+                    fontSize: event.target.value === "" ? 16 : Number(event.target.value),
+                    fontWeight: editingSubbutton.fontWeight && Number(editingSubbutton.fontWeight) > 400 ? Number(editingSubbutton.fontWeight) : 400,
+                    fontStyle: editingSubbutton.fontStyle === "italic" ? "italic" : "normal"
+                  })}
+                />
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={Number(editingSubbutton.fontWeight || 400) >= 600}
+                    onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                      fontFamily: "Arial, sans-serif",
+                      fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
+                      fontWeight: event.target.checked ? 700 : 400,
+                      fontStyle: editingSubbutton.fontStyle === "italic" ? "italic" : "normal"
+                    })}
+                  />
+                  Bold
+                </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={editingSubbutton.fontStyle === "italic"}
+                    onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                      fontFamily: "Arial, sans-serif",
+                      fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
+                      fontWeight: Number(editingSubbutton.fontWeight || 400),
+                      fontStyle: event.target.checked ? "italic" : "normal"
+                    })}
+                  />
+                  Italic
+                </label>
+              </div>
               <button type="button" onClick={closeSubbuttonEditor}>
                 Done
               </button>

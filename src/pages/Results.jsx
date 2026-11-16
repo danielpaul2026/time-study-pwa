@@ -3,10 +3,20 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   clearStudyData,
   clearStudySubjectData,
+  getMergedStudyEventSources,
+  getVisibleStudyEvents,
   getStudySessions,
   getStudySubjects,
-  getTemplates
+  getTemplates,
+  mergeStudySessionEvents,
+  unmergeStudySessionEvent
 } from "../data/studyStore";
+
+function getEventName(event) {
+  return event.elementPrime
+    ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
+    : event.name;
+}
 
 export default function Results() {
   const navigate = useNavigate();
@@ -33,6 +43,8 @@ export default function Results() {
       ? requestedSubjectNumber
       : 1)
   );
+  const [ selectedResultAction, setSelectedResultAction ] = useState(null);
+  const [ isMergeDialogOpen, setIsMergeDialogOpen ] = useState(false);
   const subjects = selectedTemplateId ? getStudySubjects(selectedTemplateId) : [];
   const selectedTemplate = templatesById.get(selectedTemplateId);
   const selectedSessions = sessions
@@ -47,7 +59,7 @@ export default function Results() {
   );
   const totalActions = selectedSessions.reduce((total, session) =>
     total + (Array.isArray(session.events)
-      ? session.events.filter(event => event.type !== "gap").length
+      ? getVisibleStudyEvents(session.events).filter(({ event }) => event.type !== "gap").length
       : 0), 0
   );
   let nextRowId = 1;
@@ -60,7 +72,7 @@ export default function Results() {
       rows.push({ type: "gap", id: `gap-${session.id}`, studyNumber: sessionIndex + 1 });
     }
 
-    events.forEach((event, eventIndex) => {
+    getVisibleStudyEvents(events).forEach(({ event, sourceEvent, index: eventIndex }) => {
       if (event.type === "gap") {
         previousTimestamp = event.timestamp;
         if (sessionIndex > 0 || eventIndex > 0) {
@@ -74,6 +86,9 @@ export default function Results() {
       rows.push({
         id: nextRowId,
         event,
+        sourceEvent,
+        sessionId: session.id,
+        mergeSources: getMergedStudyEventSources(events, sourceEvent.id),
         startTimestamp: previousTimestamp,
         elapsedSeconds: Math.max(0, (timestamp - previousTimestamp) / 1000),
         studyNumber: sessionIndex + 1
@@ -84,6 +99,37 @@ export default function Results() {
 
     return rows;
   });
+  const selectedResultRow = selectedResultAction
+    ? resultRows.find(row =>
+      row.sessionId === selectedResultAction.sessionId &&
+      row.sourceEvent.id === selectedResultAction.eventId
+    )
+    : null;
+  const selectedMergeSession = selectedResultAction
+    ? selectedSessions.find(session => session.id === selectedResultAction.sessionId)
+    : null;
+  const selectedMergeEvents = Array.isArray(selectedMergeSession?.events)
+    ? selectedMergeSession.events
+    : [];
+  const selectedMergeEntries = getVisibleStudyEvents(selectedMergeEvents);
+  const selectedMergeEntryPosition = selectedMergeEntries.findIndex(entry =>
+    entry.sourceEvent.id === selectedResultAction?.eventId
+  );
+  const selectedMergeEntry = selectedMergeEntryPosition >= 0
+    ? selectedMergeEntries[selectedMergeEntryPosition]
+    : null;
+  const previousMergeEntry = selectedMergeEntryPosition > 0 &&
+    selectedMergeEntries[selectedMergeEntryPosition - 1].event.type !== "gap"
+    ? selectedMergeEntries[selectedMergeEntryPosition - 1]
+    : null;
+  const nextMergeEntry = selectedMergeEntryPosition >= 0 &&
+    selectedMergeEntryPosition < selectedMergeEntries.length - 1 &&
+    selectedMergeEntries[selectedMergeEntryPosition + 1].event.type !== "gap"
+    ? selectedMergeEntries[selectedMergeEntryPosition + 1]
+    : null;
+  const mergeSources = selectedMergeEntry
+    ? getMergedStudyEventSources(selectedMergeEvents, selectedMergeEntry.sourceEvent.id)
+    : [];
 
   function formatDuration(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -96,6 +142,30 @@ export default function Results() {
       : `${minutes}m ${seconds}s`;
   }
 
+  function mergeSelectedResultAction(destinationEntry) {
+    if (!selectedMergeSession || !selectedMergeEntry || !destinationEntry) return;
+    if (!mergeStudySessionEvents(
+      selectedMergeSession.id,
+      selectedMergeEntry.sourceEvent.id,
+      destinationEntry.sourceEvent.id
+    )) {
+      throw new Error(`Unable to merge study events ${selectedMergeEntry.sourceEvent.id} and ${destinationEntry.sourceEvent.id}.`);
+    }
+
+    setSessions(getStudySessions());
+    setSelectedResultAction(null);
+    setIsMergeDialogOpen(false);
+  }
+
+  function unmergeResultAction(sourceEventId) {
+    if (!selectedMergeSession) return;
+    if (!unmergeStudySessionEvent(selectedMergeSession.id, sourceEventId)) {
+      throw new Error(`Unable to unmerge study event ${sourceEventId}.`);
+    }
+
+    setSessions(getStudySessions());
+  }
+
   function clearSubjectData() {
     const subjectNumber = Number(selectedSubjectNumber);
     if (!selectedTemplateId || !selectedSessions.length) return;
@@ -103,6 +173,8 @@ export default function Results() {
 
     clearStudySubjectData(selectedTemplateId, subjectNumber);
     setSessions(getStudySessions());
+    setSelectedResultAction(null);
+    setIsMergeDialogOpen(false);
   }
 
   function clearTemplateData() {
@@ -111,6 +183,8 @@ export default function Results() {
 
     clearStudyData(selectedTemplateId);
     setSessions(getStudySessions());
+    setSelectedResultAction(null);
+    setIsMergeDialogOpen(false);
   }
 
   return (
@@ -138,7 +212,11 @@ export default function Results() {
               id="results-template"
               aria-label="Template"
               value={selectedTemplateId}
-              onChange={event => setSelectedTemplateId(event.target.value)}
+              onChange={event => {
+                setSelectedTemplateId(event.target.value);
+                setSelectedResultAction(null);
+                setIsMergeDialogOpen(false);
+              }}
             >
               {availableTemplates.map(template => (
                 <option key={template.id} value={template.id}>{template.name}</option>
@@ -153,7 +231,11 @@ export default function Results() {
               id="results-subject"
               aria-label="Subject"
               value={selectedSubjectNumber}
-              onChange={event => setSelectedSubjectNumber(event.target.value)}
+              onChange={event => {
+                setSelectedSubjectNumber(event.target.value);
+                setSelectedResultAction(null);
+                setIsMergeDialogOpen(false);
+              }}
             >
               {subjects.map(subject => (
                 <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
@@ -215,8 +297,34 @@ export default function Results() {
                   const startDate = new Date(row.startTimestamp);
                   const element = row.event;
                   return (
-                    <tr key={`${row.studyNumber}-${row.id}`}>
-                      <td>{row.id}</td>
+                    <tr
+                      className={selectedResultAction?.sessionId === row.sessionId &&
+                        selectedResultAction?.eventId === row.sourceEvent.id ? "is-selected" : ""}
+                      key={`${row.studyNumber}-${row.id}`}
+                      tabIndex={0}
+                      aria-selected={selectedResultAction?.sessionId === row.sessionId &&
+                        selectedResultAction?.eventId === row.sourceEvent.id}
+                      onClick={() => setSelectedResultAction({
+                        sessionId: row.sessionId,
+                        eventId: row.sourceEvent.id
+                      })}
+                      onKeyDown={event => {
+                        if (event.target !== event.currentTarget ||
+                          (event.key !== "Enter" && event.key !== " ")
+                        ) return;
+                        event.preventDefault();
+                        setSelectedResultAction({
+                          sessionId: row.sessionId,
+                          eventId: row.sourceEvent.id
+                        });
+                      }}
+                    >
+                      <td className="results-id-cell">
+                        {row.id}
+                        {row.mergeSources.length > 0 && (
+                          <span className="results-merged-indicator">Merged</span>
+                        )}
+                      </td>
                       <td>{element.elementPrime || element.name || ""}</td>
                       <td>{element.elementSub || ""}</td>
                       <td>{element.elementId || ""}</td>
@@ -236,7 +344,85 @@ export default function Results() {
         ) : (
           <p className="results-empty-state">Study data will appear here when actions are recorded.</p>
         )}
+        {selectedResultRow && (
+          <div className="results-table-actions">
+            <span>Selected: {getEventName(selectedResultRow.event)}</span>
+            <button type="button" onClick={() => setIsMergeDialogOpen(true)}>
+              {selectedResultRow.mergeSources.length > 0 ? "Un/Merge" : "Merge"}
+            </button>
+          </div>
+        )}
       </section>
+      {isMergeDialogOpen && selectedMergeEntry && selectedMergeSession && (
+        <div
+          className="results-merge-backdrop"
+          onClick={() => setIsMergeDialogOpen(false)}
+        >
+          <section
+            className="results-merge-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="results-merge-title"
+            onClick={event => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2 id="results-merge-title">Edit action merges</h2>
+                <strong>{getEventName(selectedMergeEntry.event)}</strong>
+              </div>
+              <button type="button" onClick={() => setIsMergeDialogOpen(false)}>Done</button>
+            </header>
+            <section className="results-merge-options" aria-label="Merge to">
+              <h3>Merge to:</h3>
+              <button
+                type="button"
+                disabled={!previousMergeEntry}
+                onClick={() => mergeSelectedResultAction(previousMergeEntry)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 19V5m-6 6 6-6 6 6" />
+                </svg>
+                <span>
+                  <span>Previous:</span>
+                  <strong>{previousMergeEntry
+                    ? getEventName(previousMergeEntry.event)
+                    : "<No Previous Action>"}</strong>
+                </span>
+              </button>
+              <button
+                type="button"
+                disabled={!nextMergeEntry}
+                onClick={() => mergeSelectedResultAction(nextMergeEntry)}
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14m6-6-6 6-6-6" />
+                </svg>
+                <span>
+                  <span>Next:</span>
+                  <strong>{nextMergeEntry
+                    ? getEventName(nextMergeEntry.event)
+                    : "<No Next Action>"}</strong>
+                </span>
+              </button>
+            </section>
+            {mergeSources.length > 0 && (
+              <section className="results-unmerge-options" aria-label="Undo existing merges">
+                <h3>Undo merges:</h3>
+                {mergeSources.map(({ event: sourceEvent, destination }) => (
+                  <div key={sourceEvent.id}>
+                    <span>
+                      {getEventName(sourceEvent)} merged into {getEventName(destination)}
+                    </span>
+                    <button type="button" onClick={() => unmergeResultAction(sourceEvent.id)}>
+                      Unmerge
+                    </button>
+                  </div>
+                ))}
+              </section>
+            )}
+          </section>
+        </div>
+      )}
     </main>
   );
 }

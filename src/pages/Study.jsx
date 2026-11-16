@@ -1,14 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  createStudyEventId,
   getStudySessions,
+  getVisibleStudyEvents,
   getStudySubjects,
   getTemplates,
+  mergeStudyEvents,
+  mergeStudySessionEvents,
   saveStudySession,
   saveTemplate,
   updateStudySessionEvent
 } from "../data/studyStore";
 import useAvailableGridRows from "../hooks/useAvailableGridRows";
+
+function matchesEventTarget(first, second) {
+  return first?.source === second?.source &&
+    first?.index === second?.index &&
+    first?.sessionId === second?.sessionId &&
+    first?.eventId === second?.eventId;
+}
+
+function canMergeEntries(sourceEntry, destinationEntry) {
+  if (!sourceEntry?.target || !destinationEntry?.target) return false;
+  if (sourceEntry.target.source !== destinationEntry.target.source) return false;
+  return sourceEntry.target.source !== "saved" ||
+    sourceEntry.target.sessionId === destinationEntry.target.sessionId;
+}
+
+function getEventName(event) {
+  return event.elementPrime
+    ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
+    : event.name;
+}
 
 export default function Study() {
   const navigate = useNavigate();
@@ -28,9 +52,15 @@ export default function Study() {
   const [ nestedParent, setNestedParent ] = useState(null);
   const [ noteEditor, setNoteEditor ] = useState(null);
   const [ selectedEventTarget, setSelectedEventTarget ] = useState(null);
+  const [ pendingMergeTarget, setPendingMergeTarget ] = useState(null);
   const [ isAddingElement, setIsAddingElement ] = useState(false);
   const [ newElementName, setNewElementName ] = useState("");
   const [ addPosition, setAddPosition ] = useState(null);
+  const [ observationLogHeight, setObservationLogHeight ] = useState(null);
+  const studyPageRef = useRef(null);
+  const studyAppbarRef = useRef(null);
+  const studyLogSectionRef = useRef(null);
+  const logResizeStart = useRef(null);
   const observationLogRef = useRef(null);
 
   useEffect(() => {
@@ -64,10 +94,27 @@ export default function Study() {
 
     const eventTimestamp = Date.now();
     const actionEvent = {
+      id: createStudyEventId(),
       ...describeElement(element, parentElement),
       note: "",
       timestamp: eventTimestamp
     };
+
+    if (pendingMergeTarget) {
+      const mergedEvents = mergeStudyEvents(
+        [ ...actionEvents, actionEvent ],
+        pendingMergeTarget.eventId,
+        actionEvent.id
+      );
+      if (!mergedEvents) {
+        throw new Error(`Unable to merge pending study event ${pendingMergeTarget.eventId} into ${actionEvent.id}.`);
+      }
+
+      setActionEvents(mergedEvents);
+      setPendingMergeTarget(null);
+      setSelectedEventTarget(null);
+      return;
+    }
 
     setActionEvents(currentEvents => [
       ...currentEvents,
@@ -104,11 +151,47 @@ export default function Study() {
   }
 
   function selectReplacementElement(element, parentElement = null) {
+    if (pendingMergeTarget) {
+      recordAction(element, parentElement);
+      setNestedParent(null);
+      return true;
+    }
     if (!selectedEventTarget) return false;
     updateEventTarget(selectedEventTarget, describeElement(element, parentElement));
     setSelectedEventTarget(null);
+    setPendingMergeTarget(null);
     setNestedParent(null);
     return true;
+  }
+
+  function mergeSelectedActionInto(destinationEntry) {
+    if (!canMergeEntries(selectedLogEntry, destinationEntry)) return;
+
+    const sourceTarget = selectedLogEntry.target;
+    const destinationTarget = destinationEntry.target;
+
+    if (sourceTarget.source === "current") {
+      const mergedEvents = mergeStudyEvents(
+        actionEvents,
+        sourceTarget.eventId,
+        destinationTarget.eventId
+      );
+      if (!mergedEvents) {
+        throw new Error(`Unable to merge study events ${sourceTarget.eventId} and ${destinationTarget.eventId}.`);
+      }
+      setActionEvents(mergedEvents);
+    } else if (!mergeStudySessionEvents(
+      sourceTarget.sessionId,
+      sourceTarget.eventId,
+      destinationTarget.eventId
+    )) {
+      throw new Error(`Unable to merge study events ${sourceTarget.eventId} and ${destinationTarget.eventId}.`);
+    } else {
+      setStudySessions(getStudySessions());
+    }
+
+    setSelectedEventTarget(null);
+    setPendingMergeTarget(null);
   }
 
   function addElement(event) {
@@ -187,9 +270,11 @@ export default function Study() {
       setSelectedEventTarget({
         source: "saved",
         sessionId,
-        index: selectedEventTarget.index
+        index: selectedEventTarget.index,
+        eventId: selectedEventTarget.eventId
       });
     }
+    setPendingMergeTarget(null);
     setStudySessions(getStudySessions());
     setActionEvents([]);
     setTimestamp(null);
@@ -204,6 +289,57 @@ export default function Study() {
     return [ hours, minutes, seconds ]
       .map(value => String(value).padStart(2, "0"))
       .join(":");
+  }
+
+  function getObservationLogHeightBounds() {
+    const pageHeight = studyPageRef.current?.clientHeight || window.innerHeight;
+    const appbarHeight = studyAppbarRef.current?.getBoundingClientRect().height || 48;
+    const resizeHandleHeight = 14;
+    const minimumGridHeight = 100;
+    const minimumLogHeight = 100;
+
+    return {
+      minimum: minimumLogHeight,
+      maximum: Math.max(
+        minimumLogHeight,
+        pageHeight - appbarHeight - resizeHandleHeight - minimumGridHeight
+      )
+    };
+  }
+
+  function clampObservationLogHeight(height) {
+    const bounds = getObservationLogHeightBounds();
+    return Math.max(bounds.minimum, Math.min(bounds.maximum, height));
+  }
+
+  function startObservationLogResize(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    logResizeStart.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: studyLogSectionRef.current?.getBoundingClientRect().height || 180
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function moveObservationLogResize(event) {
+    const start = logResizeStart.current;
+    if (!start || start.pointerId !== event.pointerId) return;
+    setObservationLogHeight(clampObservationLogHeight(start.startHeight - (event.clientY - start.startY)));
+  }
+
+  function endObservationLogResize(event) {
+    if (logResizeStart.current?.pointerId !== event.pointerId) return;
+    logResizeStart.current = null;
+  }
+
+  function resizeObservationLogByKeyboard(event) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const currentHeight = studyLogSectionRef.current?.getBoundingClientRect().height || 180;
+    const adjustment = event.key === "ArrowUp" ? 20 : -20;
+    setObservationLogHeight(clampObservationLogHeight(currentHeight + adjustment));
   }
 
   const columns = Math.max(1, Math.min(12, Number(template?.columns) || 3));
@@ -235,9 +371,10 @@ export default function Study() {
     .sort((first, second) => first.startTime - second.startTime);
   const previousEvents = previousSessions.flatMap((session, sessionIndex) => {
     const events = Array.isArray(session.events) ? session.events : [];
-    const sessionEvents = events.map((event, index) => ({
+    const sessionEvents = getVisibleStudyEvents(events).map(({ event, sourceEvent, index }) => ({
       event,
-      target: { source: "saved", sessionId: session.id, index }
+      sourceEvent,
+      target: { source: "saved", sessionId: session.id, index, eventId: sourceEvent.id }
     }));
     if (sessionIndex === 0 || events.some(event => event.type === "gap")) return sessionEvents;
 
@@ -246,18 +383,39 @@ export default function Study() {
       ...sessionEvents
     ];
   });
-  const currentEvents = actionEvents.map((event, index) => ({
+  const currentEvents = getVisibleStudyEvents(actionEvents).map(({ event, sourceEvent, index }) => ({
     event,
-    target: { source: "current", index }
+    sourceEvent,
+    target: { source: "current", index, eventId: sourceEvent.id }
   }));
   const visibleEvents = [ ...previousEvents, ...currentEvents ];
+  const selectedLogIndex = visibleEvents.findIndex(item =>
+    matchesEventTarget(item.target, selectedEventTarget)
+  );
+  const selectedLogEntry = selectedLogIndex >= 0 ? visibleEvents[selectedLogIndex] : null;
+  const previousLogEntry = selectedLogIndex > 0 && visibleEvents[selectedLogIndex - 1].event.type !== "gap"
+    ? visibleEvents[selectedLogIndex - 1]
+    : null;
+  const nextLogEntry = selectedLogIndex >= 0 &&
+    selectedLogIndex < visibleEvents.length - 1 &&
+    visibleEvents[selectedLogIndex + 1].event.type !== "gap"
+    ? visibleEvents[selectedLogIndex + 1]
+    : null;
+  const canMergePrevious = canMergeEntries(selectedLogEntry, previousLogEntry);
+  const canMergeNext = canMergeEntries(selectedLogEntry, nextLogEntry);
+  const canMergeWithNextAction = timestamp !== null &&
+    selectedLogEntry?.target.source === "current" &&
+    selectedLogIndex === visibleEvents.length - 1;
   const visibleActionCount = visibleEvents.filter(item => item.event.type !== "gap").length;
+  const observationLogHeightBounds = getObservationLogHeightBounds();
+  const observationLogHeightValue = observationLogHeight ??
+    (timestamp !== null ? 180 : 218);
 
   return (
-    <main className="study-page">
+    <main className="study-page" ref={studyPageRef}>
       {template ? (
         <>
-          <header className="study-appbar">
+          <header className="study-appbar" ref={studyAppbarRef}>
             <button
               className="study-menu-button"
               type="button"
@@ -319,7 +477,10 @@ export default function Study() {
                       style={{
                         backgroundColor: element.backgroundColor || "#dedede",
                         color: element.textColor || "#111111",
-                        fontFamily: element.fontFamily || "Arial, sans-serif"
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: `${Number.isFinite(Number(element.fontSize)) ? Number(element.fontSize) : 16}px`,
+                        fontWeight: Number.isFinite(Number(element.fontWeight)) ? Number(element.fontWeight) : 400,
+                        fontStyle: element.fontStyle === "italic" ? "italic" : "normal"
                       }}
                       onClick={() => {
                         if (!nestedParent && (element.isNested || element.children?.length > 0)) {
@@ -353,9 +514,31 @@ export default function Study() {
               );
             })}
           </div>
+          <div
+            className="study-log-resize-handle"
+            role="separator"
+            aria-label="Resize observation log"
+            aria-orientation="horizontal"
+            aria-controls="study-observation-log"
+            aria-valuemin={observationLogHeightBounds.minimum}
+            aria-valuemax={observationLogHeightBounds.maximum}
+            aria-valuenow={Math.round(observationLogHeightValue)}
+            tabIndex={0}
+            onPointerDown={startObservationLogResize}
+            onPointerMove={moveObservationLogResize}
+            onPointerUp={endObservationLogResize}
+            onPointerCancel={endObservationLogResize}
+            onLostPointerCapture={endObservationLogResize}
+            onKeyDown={resizeObservationLogByKeyboard}
+          />
           <section
+            ref={studyLogSectionRef}
+            id="study-observation-log"
             className={`study-observation-log${timestamp !== null ? " is-recording" : ""}`}
             aria-label="Recorded observation log"
+            style={observationLogHeight === null ? undefined : {
+              flexBasis: `${observationLogHeight}px`
+            }}
           >
             {timestamp !== null && (
               <div className="study-readout" role="status">
@@ -367,7 +550,13 @@ export default function Study() {
             <div className="observation-log-heading">
               <div className="observation-log-title">
                 <h2>Observation log</h2>
-                {selectedEventTarget && <span>Select a button to replace this action</span>}
+                {selectedEventTarget && (
+                  <span>
+                    {pendingMergeTarget
+                      ? "Tap the next study button to complete the merge"
+                      : "Select a button to replace this action"}
+                  </span>
+                )}
               </div>
               {!hasEmptyGridCell && (
                 <button
@@ -393,7 +582,7 @@ export default function Study() {
               <p className="observation-log-empty">Recorded actions appear here during capture.</p>
             ) : (
               <ol className="observation-log-list" ref={observationLogRef}>
-                {visibleEvents.map(({ event, target }, index) => {
+                {visibleEvents.map(({ event, sourceEvent, target }, index) => {
                   const eventKey = `${event.timestamp}-${index}`;
                   const isSelectedForReplacement =
                     selectedEventTarget?.source === target?.source &&
@@ -409,11 +598,12 @@ export default function Study() {
                             className={`observation-action-name${isSelectedForReplacement ? " is-selected" : ""}`}
                             type="button"
                             aria-pressed={isSelectedForReplacement}
-                            onClick={() => setSelectedEventTarget(isSelectedForReplacement ? null : target)}
+                            onClick={() => {
+                              setPendingMergeTarget(null);
+                              setSelectedEventTarget(isSelectedForReplacement ? null : target);
+                            }}
                           >
-                            {event.elementPrime
-                              ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
-                              : event.name}
+                            {getEventName(event)}
                           </button>
                           <time dateTime={new Date(event.timestamp).toISOString()}>
                             {new Date(event.timestamp).toLocaleTimeString()}
@@ -438,7 +628,7 @@ export default function Study() {
                             disabled={!target}
                             onClick={() => setNoteEditor({
                               target,
-                              note: event.note || ""
+                              note: sourceEvent.note || ""
                             })}
                           >
                             <svg viewBox="0 0 20 20" aria-hidden="true">
@@ -451,6 +641,92 @@ export default function Study() {
                   );
                   })}
               </ol>
+            )}
+            {selectedLogEntry && (
+              <div
+              className="study-merge-overlay"
+              onClick={() => {
+                setSelectedEventTarget(null);
+                setPendingMergeTarget(null);
+              }}
+              >
+              <section
+                className="study-merge-dialog"
+                role="dialog"
+                aria-modal="false"
+                aria-labelledby="study-merge-title"
+                onClick={event => event.stopPropagation()}
+              >
+                <div className="study-merge-source">
+                  <h2 id="study-merge-title">Editing action</h2>
+                  <strong>{getEventName(selectedLogEntry.event)}</strong>
+                  <span>Count: {selectedLogEntry.event.count ?? 1}</span>
+                  <small>
+                    {pendingMergeTarget
+                      ? "Tap the next study button to complete the merge"
+                      : "Select a button to replace this action"}
+                  </small>
+                </div>
+                <div className="study-merge-options">
+                  <h2>Merge to:</h2>
+                  <button
+                    type="button"
+                    disabled={!canMergePrevious}
+                    aria-label={previousLogEntry
+                      ? `Merge to previous action: ${getEventName(previousLogEntry.event)}`
+                      : "No previous action to merge to"}
+                    onClick={() => mergeSelectedActionInto(previousLogEntry)}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 19V5m-6 6 6-6 6 6" />
+                    </svg>
+                    <span>
+                      <span>Previous:</span>
+                      <strong>{previousLogEntry
+                        ? getEventName(previousLogEntry.event)
+                        : "<No Previous Action>"}</strong>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={pendingMergeTarget !== null || (!canMergeNext && !canMergeWithNextAction)}
+                    aria-label={nextLogEntry
+                      ? `Merge to next action: ${getEventName(nextLogEntry.event)}`
+                      : canMergeWithNextAction
+                        ? "Merge to the next action when it is recorded"
+                        : "No next action to merge to"}
+                    onClick={() => {
+                      if (nextLogEntry) {
+                        mergeSelectedActionInto(nextLogEntry);
+                      } else if (canMergeWithNextAction) {
+                        setPendingMergeTarget(selectedLogEntry.target);
+                      }
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 5v14m6-6-6 6-6-6" />
+                    </svg>
+                    <span>
+                      <span>Next:</span>
+                      <strong>{nextLogEntry
+                        ? getEventName(nextLogEntry.event)
+                        : canMergeWithNextAction ? "<Next Action>" : "<No Next Action>"}</strong>
+                      {pendingMergeTarget && <small>Waiting for next action</small>}
+                    </span>
+                  </button>
+                </div>
+                <button
+                  className="study-merge-cancel"
+                  type="button"
+                  onClick={() => {
+                    setSelectedEventTarget(null);
+                    setPendingMergeTarget(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </section>
+              </div>
             )}
             {noteEditor && (
               <div

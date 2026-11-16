@@ -1,7 +1,13 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import enVistaLogo from "../assets/enVista_Logo_Color.png";
-import { deleteTemplate, getStudySessions, getTemplates, saveTemplate } from "../data/studyStore";
+import {
+  deleteTemplate,
+  getStudySessions,
+  getTemplates,
+  getVisibleStudyEvents,
+  saveTemplate
+} from "../data/studyStore";
 
 function formatDuration(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -68,7 +74,7 @@ export default function Menu() {
     );
     const totalEntries = selectedSessions.reduce((total, session) =>
         total + (Array.isArray(session.events)
-            ? session.events.filter(event => event.type !== "gap").length
+            ? getVisibleStudyEvents(session.events).filter(({ event }) => event.type !== "gap").length
             : 0), 0
     );
     async function importTemplate(event) {
