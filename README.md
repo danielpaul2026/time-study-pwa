@@ -2,6 +2,8 @@
 
 This PWA is intended to be used as a local tool for others at enVista to take time studies. The goal is to make it easy to configure and use without both the overcomplication and limitations of the current solution (Quetech Workstudy+). 
 
+[text](https://danielpaul2026.github.io/time-study-pwa/)
+
 ## Features
 - enVista-branded menu with selectable templates and per-template study summaries
 - import templates from JSON files under Menu > More
