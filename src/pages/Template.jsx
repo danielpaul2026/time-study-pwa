@@ -56,6 +56,11 @@ function getTextStyle(element = {}) {
   };
 }
 
+function getEditableFontSize(element) {
+  const fontSize = Number(element.fontSize);
+  return Math.min(26, Math.max(6, Number.isFinite(fontSize) ? fontSize : 16));
+}
+
 export default function Template() {
   const { templateId } = useParams();
   const navigate = useNavigate();
@@ -533,11 +538,19 @@ export default function Template() {
               className="element-editor"
               role="dialog"
               aria-modal="true"
-              aria-labelledby="element-name-title"
+              aria-label="Add button"
               onClick={event => event.stopPropagation()}
             >
-              <h2 id="element-name-title">Add button</h2>
-              <label htmlFor="element-name">Button name</label>
+              <div className="template-add-dialog-actions">
+                <button type="button" onClick={() => {
+                  setIsAdding(false);
+                  setAddPosition(null);
+                }}>Cancel</button>
+                <label htmlFor="element-name">Button Text</label>
+                <button type="button" onClick={addElement} disabled={!elementName.trim()}>
+                  Add
+                </button>
+              </div>
               <input
                 autoFocus
                 id="element-name"
@@ -545,15 +558,6 @@ export default function Template() {
                 onChange={event => setElementName(event.target.value)}
                 placeholder="For example, Pick item"
               />
-              <div className="template-add-dialog-actions">
-                <button type="button" onClick={() => {
-                  setIsAdding(false);
-                  setAddPosition(null);
-                }}>Cancel</button>
-                <button type="button" onClick={addElement} disabled={!elementName.trim()}>
-                  Add
-                </button>
-              </div>
             </section>
           </div>
         )}
@@ -698,109 +702,126 @@ export default function Template() {
               aria-labelledby="element-editor-title"
               onClick={event => event.stopPropagation()}
             >
-              <h2 id="element-editor-title">Customize button</h2>
-              <label htmlFor="editing-element-name">Button text</label>
-              <input
-                id="editing-element-name"
-                value={editingElement.name}
-                onChange={event => updateElement(editingElement.id, { name: event.target.value })}
-              />
-              <label htmlFor="editing-element-id">Element ID</label>
-              <input
-                id="editing-element-id"
-                value={editingElement.externalId || ""}
-                onChange={event => updateElement(editingElement.id, { externalId: event.target.value })}
-              />
-              <label htmlFor="editing-element-count">Default count</label>
-              <input
-                id="editing-element-count"
-                type="number"
-                min="0"
-                step="any"
-                value={editingElement.defaultCount ?? 1}
-                onChange={event => updateElement(editingElement.id, {
-                  defaultCount: event.target.value === "" ? "" : Number(event.target.value)
-                })}
-              />
-              {isNestedElement(editingElement) ? (
-                <button type="button" onClick={() => unnestElement(editingElement.id)}>
-                  Unnest
+              <header className="element-editor-header">
+                <h2 id="element-editor-title">Properties</h2>
+                {isNestedElement(editingElement) ? (
+                  <button type="button" onClick={() => unnestElement(editingElement.id)}>
+                    Unnest
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => updateElement(editingElement.id, {
+                      isNested: true,
+                      children: [],
+                      childrenColumns: Number(columns),
+                      childrenRowHeightLines: Number(rowHeightLines)
+                    })}
+                  >
+                    Nest
+                  </button>
+                )}
+                <button type="button" onClick={closeElementEditor}>
+                  Apply
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => updateElement(editingElement.id, {
-                    isNested: true,
-                    children: [],
-                    childrenColumns: Number(columns),
-                    childrenRowHeightLines: Number(rowHeightLines)
-                  })}
-                >
-                  Nest
-                </button>
-              )}
-              <div className="color-settings">
-                <label htmlFor="element-background">Button color</label>
+              </header>
+              <div className="element-editor-field">
+                <label htmlFor="editing-element-name">Button text</label>
                 <input
-                  id="element-background"
-                  type="color"
-                  value={editingElement.backgroundColor || "#dedede"}
-                  onChange={event => updateElement(editingElement.id, { backgroundColor: event.target.value })}
-                />
-                <label htmlFor="element-text-color">Text color</label>
-                <input
-                  id="element-text-color"
-                  type="color"
-                  value={editingElement.textColor || "#111111"}
-                  onChange={event => updateElement(editingElement.id, { textColor: event.target.value })}
+                  id="editing-element-name"
+                  value={editingElement.name}
+                  onChange={event => updateElement(editingElement.id, { name: event.target.value })}
                 />
               </div>
-              <label htmlFor="element-text-size">Text Style</label>
-              <div className="text-style-controls">
+              <div className="element-editor-field">
+                <label htmlFor="editing-element-id">Element ID</label>
                 <input
-                  id="element-text-size"
+                  id="editing-element-id"
+                  value={editingElement.externalId || ""}
+                  onChange={event => updateElement(editingElement.id, { externalId: event.target.value })}
+                />
+              </div>
+              <div className="element-editor-field">
+                <label htmlFor="editing-element-count">Default count</label>
+                <input
+                  id="editing-element-count"
                   type="number"
-                  min="8"
-                  max="72"
-                  step="1"
-                  value={Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16}
+                  min="0"
+                  step="any"
+                  value={editingElement.defaultCount ?? 1}
                   onChange={event => updateElement(editingElement.id, {
-                    fontFamily: "Arial, sans-serif",
-                    fontSize: event.target.value === "" ? 16 : Number(event.target.value),
-                    fontWeight: editingElement.fontWeight && Number(editingElement.fontWeight) > 400 ? Number(editingElement.fontWeight) : 400,
-                    fontStyle: editingElement.fontStyle === "italic" ? "italic" : "normal"
+                    defaultCount: event.target.value === "" ? "" : Number(event.target.value)
                   })}
                 />
-                <label>
+              </div>
+              <div className="color-settings">
+                <div className="element-color-setting">
+                  <label htmlFor="element-background">Button color</label>
                   <input
-                    type="checkbox"
-                    checked={Number(editingElement.fontWeight || 400) >= 600}
+                    id="element-background"
+                    type="color"
+                    value={editingElement.backgroundColor || "#dedede"}
+                    onChange={event => updateElement(editingElement.id, { backgroundColor: event.target.value })}
+                  />
+                </div>
+                <div className="element-color-setting">
+                  <label htmlFor="element-text-color">Text color</label>
+                  <input
+                    id="element-text-color"
+                    type="color"
+                    value={editingElement.textColor || "#111111"}
+                    onChange={event => updateElement(editingElement.id, { textColor: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="text-style-controls">
+                <div className="element-editor-field">
+                  <label htmlFor="element-text-size">Text Size</label>
+                  <input
+                    className="text-size-slider"
+                    id="element-text-size"
+                    type="range"
+                    min="6"
+                    max="26"
+                    step="1"
+                    value={getEditableFontSize(editingElement)}
                     onChange={event => updateElement(editingElement.id, {
                       fontFamily: "Arial, sans-serif",
-                      fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
-                      fontWeight: event.target.checked ? 700 : 400,
+                      fontSize: event.target.valueAsNumber,
+                      fontWeight: editingElement.fontWeight && Number(editingElement.fontWeight) > 400 ? Number(editingElement.fontWeight) : 400,
                       fontStyle: editingElement.fontStyle === "italic" ? "italic" : "normal"
                     })}
                   />
-                  Bold
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editingElement.fontStyle === "italic"}
-                    onChange={event => updateElement(editingElement.id, {
-                      fontFamily: "Arial, sans-serif",
-                      fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
-                      fontWeight: Number(editingElement.fontWeight || 400),
-                      fontStyle: event.target.checked ? "italic" : "normal"
-                    })}
-                  />
-                  Italic
-                </label>
+                </div>
+                <div className="text-style-options">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={Number(editingElement.fontWeight || 400) >= 600}
+                      onChange={event => updateElement(editingElement.id, {
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
+                        fontWeight: event.target.checked ? 700 : 400,
+                        fontStyle: editingElement.fontStyle === "italic" ? "italic" : "normal"
+                      })}
+                    />
+                    Bold
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={editingElement.fontStyle === "italic"}
+                      onChange={event => updateElement(editingElement.id, {
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: Number.isFinite(Number(editingElement.fontSize)) ? Number(editingElement.fontSize) : 16,
+                        fontWeight: Number(editingElement.fontWeight || 400),
+                        fontStyle: event.target.checked ? "italic" : "normal"
+                      })}
+                    />
+                    Italic
+                  </label>
+                </div>
               </div>
-              <button type="button" onClick={closeElementEditor}>
-                Done
-              </button>
             </section>
           </div>
         )}
@@ -816,100 +837,117 @@ export default function Template() {
               aria-labelledby="subbutton-editor-title"
               onClick={event => event.stopPropagation()}
             >
-              <h2 id="subbutton-editor-title">Customize subbutton</h2>
-              <label htmlFor="editing-subbutton-name">Button text</label>
-              <input
-                id="editing-subbutton-name"
-                value={editingSubbutton.name}
-                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                  name: event.target.value
-                })}
-              />
-              <label htmlFor="editing-subbutton-id">Element ID</label>
-              <input
-                id="editing-subbutton-id"
-                value={editingSubbutton.externalId || ""}
-                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                  externalId: event.target.value
-                })}
-              />
-              <label htmlFor="editing-subbutton-count">Default count</label>
-              <input
-                id="editing-subbutton-count"
-                type="number"
-                min="0"
-                step="any"
-                value={editingSubbutton.defaultCount ?? 1}
-                onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                  defaultCount: event.target.value === "" ? "" : Number(event.target.value)
-                })}
-              />
-              <div className="color-settings">
-                <label htmlFor="subbutton-background">Button color</label>
+              <header className="element-editor-header element-editor-header-simple">
+                <h2 id="subbutton-editor-title">Properties</h2>
+                <button type="button" onClick={closeSubbuttonEditor}>
+                  Apply
+                </button>
+              </header>
+              <div className="element-editor-field">
+                <label htmlFor="editing-subbutton-name">Button text</label>
                 <input
-                  id="subbutton-background"
-                  type="color"
-                  value={editingSubbutton.backgroundColor || "#dedede"}
+                  id="editing-subbutton-name"
+                  value={editingSubbutton.name}
                   onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                    backgroundColor: event.target.value
-                  })}
-                />
-                <label htmlFor="subbutton-text-color">Text color</label>
-                <input
-                  id="subbutton-text-color"
-                  type="color"
-                  value={editingSubbutton.textColor || "#111111"}
-                  onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                    textColor: event.target.value
+                    name: event.target.value
                   })}
                 />
               </div>
-              <label htmlFor="subbutton-text-size">Text Style</label>
-              <div className="text-style-controls">
+              <div className="element-editor-field">
+                <label htmlFor="editing-subbutton-id">Element ID</label>
                 <input
-                  id="subbutton-text-size"
-                  type="number"
-                  min="8"
-                  max="72"
-                  step="1"
-                  value={Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16}
+                  id="editing-subbutton-id"
+                  value={editingSubbutton.externalId || ""}
                   onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                    fontFamily: "Arial, sans-serif",
-                    fontSize: event.target.value === "" ? 16 : Number(event.target.value),
-                    fontWeight: editingSubbutton.fontWeight && Number(editingSubbutton.fontWeight) > 400 ? Number(editingSubbutton.fontWeight) : 400,
-                    fontStyle: editingSubbutton.fontStyle === "italic" ? "italic" : "normal"
+                    externalId: event.target.value
                   })}
                 />
-                <label>
+              </div>
+              <div className="element-editor-field">
+                <label htmlFor="editing-subbutton-count">Default count</label>
+                <input
+                  id="editing-subbutton-count"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={editingSubbutton.defaultCount ?? 1}
+                  onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                    defaultCount: event.target.value === "" ? "" : Number(event.target.value)
+                  })}
+                />
+              </div>
+              <div className="color-settings">
+                <div className="element-color-setting">
+                  <label htmlFor="subbutton-background">Button color</label>
                   <input
-                    type="checkbox"
-                    checked={Number(editingSubbutton.fontWeight || 400) >= 600}
+                    id="subbutton-background"
+                    type="color"
+                    value={editingSubbutton.backgroundColor || "#dedede"}
+                    onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                      backgroundColor: event.target.value
+                    })}
+                  />
+                </div>
+                <div className="element-color-setting">
+                  <label htmlFor="subbutton-text-color">Text color</label>
+                  <input
+                    id="subbutton-text-color"
+                    type="color"
+                    value={editingSubbutton.textColor || "#111111"}
+                    onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                      textColor: event.target.value
+                    })}
+                  />
+                </div>
+              </div>
+              <div className="text-style-controls">
+                <div className="element-editor-field">
+                  <label htmlFor="subbutton-text-size">Text Size</label>
+                  <input
+                    className="text-size-slider"
+                    id="subbutton-text-size"
+                    type="range"
+                    min="6"
+                    max="26"
+                    step="1"
+                    value={getEditableFontSize(editingSubbutton)}
                     onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
                       fontFamily: "Arial, sans-serif",
-                      fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
-                      fontWeight: event.target.checked ? 700 : 400,
+                      fontSize: event.target.valueAsNumber,
+                      fontWeight: editingSubbutton.fontWeight && Number(editingSubbutton.fontWeight) > 400 ? Number(editingSubbutton.fontWeight) : 400,
                       fontStyle: editingSubbutton.fontStyle === "italic" ? "italic" : "normal"
                     })}
                   />
-                  Bold
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={editingSubbutton.fontStyle === "italic"}
-                    onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
-                      fontFamily: "Arial, sans-serif",
-                      fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
-                      fontWeight: Number(editingSubbutton.fontWeight || 400),
-                      fontStyle: event.target.checked ? "italic" : "normal"
-                    })}
-                  />
-                  Italic
-                </label>
+                </div>
+                <div className="text-style-options">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={Number(editingSubbutton.fontWeight || 400) >= 600}
+                      onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
+                        fontWeight: event.target.checked ? 700 : 400,
+                        fontStyle: editingSubbutton.fontStyle === "italic" ? "italic" : "normal"
+                      })}
+                    />
+                    Bold
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={editingSubbutton.fontStyle === "italic"}
+                      onChange={event => updateSubbutton(editingParentElement.id, editingSubbuttonIndex, {
+                        fontFamily: "Arial, sans-serif",
+                        fontSize: Number.isFinite(Number(editingSubbutton.fontSize)) ? Number(editingSubbutton.fontSize) : 16,
+                        fontWeight: Number(editingSubbutton.fontWeight || 400),
+                        fontStyle: event.target.checked ? "italic" : "normal"
+                      })}
+                    />
+                    Italic
+                  </label>
+                </div>
               </div>
-              <button type="button" onClick={closeSubbuttonEditor}>
-                Done
-              </button>
             </section>
           </div>
         )}

@@ -404,9 +404,18 @@ input {
 }
 
 .template-add-dialog-actions {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
   gap: 8px;
+}
+
+.template-add-dialog-actions button:first-child {
+  justify-self: start;
+}
+
+.template-add-dialog-actions button:last-child {
+  justify-self: end;
 }
 
 .element-editor-backdrop {
@@ -433,9 +442,25 @@ input {
   box-shadow: 0 -8px 32px rgb(0 0 0 / 18%);
 }
 
-.element-editor h2 {
-  margin: 0 0 4px;
+.element-editor-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.element-editor-header-simple {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.element-editor-header h2 {
+  min-width: 0;
+  margin: 0;
   font-size: 19px;
+}
+
+.element-editor-header > button:last-child {
+  justify-self: end;
 }
 
 .element-editor > input,
@@ -450,9 +475,31 @@ input {
   font: inherit;
 }
 
+.element-editor-field {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 1.5fr);
+  align-items: center;
+  gap: 8px;
+}
+
+.element-editor-field > label::after,
+.element-color-setting > label::after {
+  content: ":";
+}
+
+.element-editor-field > input:not([type="range"]) {
+  width: 100%;
+  min-width: 0;
+}
+
 .color-settings {
   display: grid;
-  grid-template-columns: 1fr 54px;
+  gap: 8px;
+}
+
+.element-color-setting {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) 54px;
   align-items: center;
   gap: 8px;
 }
@@ -462,25 +509,30 @@ input {
   gap: 10px;
 }
 
-.text-style-controls input[type="number"] {
+.text-size-slider {
   width: 100%;
-  min-height: 46px;
-  padding: 8px 10px;
-  border: 1px solid #87939a;
-  border-radius: 5px;
-  background: #fff;
-  color: #16191c;
-  font: inherit;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: #1069a5;
 }
 
-.text-style-controls label {
+.text-style-options {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.text-style-options label {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: #16191c;
 }
 
-.text-style-controls input[type="checkbox"] {
+.text-style-options input[type="checkbox"] {
   width: 16px;
   height: 16px;
 }
