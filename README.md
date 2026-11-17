@@ -6,7 +6,7 @@ This PWA is intended to be used as a local tool for others at enVista to take ti
 
 ## Features
 - enVista-branded menu with selectable templates and per-template study summaries
-- installable as a standalone home-screen app on supported mobile browsers
+- installable as a standalone home-screen app on supported mobile browsers, with offline app-shell and asset caching after the first successful online load
 - import templates from JSON files under Menu > More
 - export/share a selected template as JSON and study data as an Excel workbook with a sheet for each populated subject, using the browser's share sheet when available or downloading the file for sharing
 - warning-confirmed template deletion from the Menu action bar
