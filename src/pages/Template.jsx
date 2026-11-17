@@ -65,8 +65,8 @@ export default function Template() {
   );
   const [ name, setName ] = useState(initialTemplate?.name || "");
   const [ elements, setElements ] = useState(initialTemplate?.elements || []);
-  const [ columns, setColumns ] = useState(String(Math.min(8, Math.max(2, Number(initialTemplate?.columns) || 3))));
-  const [ rowHeightLines, setRowHeightLines ] = useState(String(Math.min(5, Math.max(1, Number(initialTemplate?.rowHeightLines) || 2))));
+  const [ columns, setColumns ] = useState(String(Math.min(6, Math.max(1, Number(initialTemplate?.columns) || 2))));
+  const [ rowHeightLines, setRowHeightLines ] = useState(String(Math.min(8, Math.max(1, Number(initialTemplate?.rowHeightLines) || 5))));
   const [ isDirty, setIsDirty ] = useState(!initialTemplate);
   const [ isAdding, setIsAdding ] = useState(false);
   const [ elementName, setElementName ] = useState("");
@@ -313,17 +313,17 @@ export default function Template() {
       !cleanName ||
       elements.length === 0 ||
       !Number.isInteger(rootColumnCount) ||
-      rootColumnCount < 2 ||
-      rootColumnCount > 8 ||
+      rootColumnCount < 1 ||
+      rootColumnCount > 6 ||
       !Number.isInteger(rootLineCount) ||
       rootLineCount < 1 ||
-      rootLineCount > 5 ||
+      rootLineCount > 8 ||
       !Number.isInteger(columnCount) ||
-      columnCount < 2 ||
-      columnCount > 8 ||
+      columnCount < 1 ||
+      columnCount > 6 ||
       !Number.isInteger(lineCount) ||
       lineCount < 1 ||
-      lineCount > 5 ||
+      lineCount > 8 ||
       elements.some(element => element.children?.some(child => !child.name.trim()))
     ) return;
 
@@ -360,13 +360,13 @@ export default function Template() {
   const currentElements = nestedParent
     ? nestedParent.children || []
     : elements;
-  const preferredLineCount = Math.min(5, Math.max(1, Number(nestedParent?.childrenRowHeightLines ?? rowHeightLines) || 2));
+  const preferredLineCount = Math.min(8, Math.max(1, Number(nestedParent?.childrenRowHeightLines ?? rowHeightLines) || 5));
   const preferredRowHeight = Math.max(28, preferredLineCount * 16.1 + 8);
   const { gridRef, availableRows, availableHeight } = useAvailableGridRows(1, preferredRowHeight);
-  const preferredColumns = Math.min(8, Math.max(2, Number(nestedParent?.childrenColumns ?? columns) || 3));
+  const preferredColumns = Math.min(6, Math.max(1, Number(nestedParent?.childrenColumns ?? columns) || 2));
   const baseRows = Math.max(1, availableRows || 1);
-  const gridRows = Math.max(baseRows, Math.ceil(currentElements.length / 8));
-  const columnCount = Math.min(8, Math.max(2, preferredColumns, Math.ceil(currentElements.length / gridRows)));
+  const gridRows = Math.max(baseRows, Math.ceil(currentElements.length / 6));
+  const columnCount = Math.min(6, Math.max(1, preferredColumns, Math.ceil(currentElements.length / gridRows)));
   const availableHeightForRows = Math.max(1, availableHeight - Math.max(0, gridRows - 1) * 4);
   const rowHeight = Math.max(
     1,
@@ -374,7 +374,7 @@ export default function Template() {
   );
   const columnCountForSave = columnCount;
   const viewColumnSetting = columnCount;
-  const viewLineSetting = Math.min(5, preferredLineCount);
+  const viewLineSetting = preferredLineCount;
   const visibleElements = normalizePositions(currentElements, gridRows * columnCount);
   const elementsByPosition = new Map(visibleElements.map((element, index) => [
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index,
@@ -387,18 +387,18 @@ export default function Template() {
   };
   const settingsAreValid =
     Number.isInteger(Number(columns)) &&
-    Number(columns) >= 2 &&
-    Number(columns) <= 8 &&
+    Number(columns) >= 1 &&
+    Number(columns) <= 6 &&
     Number.isInteger(Number(rowHeightLines)) &&
     Number(rowHeightLines) >= 1 &&
-    Number(rowHeightLines) <= 5 &&
+    Number(rowHeightLines) <= 8 &&
     Number.isInteger(Number(viewColumnSetting)) &&
-    Number(viewColumnSetting) >= 2 &&
-    Number(viewColumnSetting) <= 8 &&
-    columnCount <= 8 &&
+    Number(viewColumnSetting) >= 1 &&
+    Number(viewColumnSetting) <= 6 &&
+    columnCount <= 6 &&
     Number.isInteger(Number(viewLineSetting)) &&
     Number(viewLineSetting) >= 1 &&
-    Number(viewLineSetting) <= 5;
+    Number(viewLineSetting) <= 8;
 
   return (
     <main className="template-editor">
@@ -451,7 +451,11 @@ export default function Template() {
 
         <div className="template-grid-settings">
           <div className="template-grid-setting template-grid-setting-columns">
-            <select
+            <input
+              type="range"
+              min="1"
+              max="6"
+              step="1"
               aria-label="Columns"
               value={viewColumnSetting}
               onChange={event => {
@@ -462,30 +466,60 @@ export default function Template() {
                   setColumns(event.target.value);
                 }
               }}
-            >
-              {Array.from({ length: 7 }, (_, index) => index + 2).map(value => (
-                <option key={value} value={value}>{value}</option>
-              ))}
-            </select>
+            />
+            <output>{viewColumnSetting}</output>
             <span aria-hidden="true">columns</span>
           </div>
           <div className="template-grid-setting template-grid-setting-rows">
-            <select
-              aria-label="Lines per row"
-              value={viewLineSetting}
-              onChange={event => {
+            <button
+              type="button"
+              aria-label="Decrease lines per row"
+              disabled={viewLineSetting <= 1}
+              onClick={() => {
+                const nextValue = Math.max(1, viewLineSetting - 1);
                 markUnsaved();
                 if (nestedParent) {
-                  updateElement(nestedParent.id, { childrenRowHeightLines: Number(event.target.value) });
+                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
                 } else {
-                  setRowHeightLines(event.target.value);
+                  setRowHeightLines(String(nextValue));
                 }
               }}
             >
-              {Array.from({ length: 5 }, (_, index) => index + 1).map(value => (
-                <option key={value} value={value}>{value}</option>
-              ))}
-            </select>
+              -
+            </button>
+            <input
+              type="number"
+              min="1"
+              max="8"
+              step="1"
+              aria-label="Lines per row"
+              value={viewLineSetting}
+              onChange={event => {
+                const nextValue = Math.min(8, Math.max(1, Number(event.target.value) || 1));
+                markUnsaved();
+                if (nestedParent) {
+                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
+                } else {
+                  setRowHeightLines(String(nextValue));
+                }
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Increase lines per row"
+              disabled={viewLineSetting >= 8}
+              onClick={() => {
+                const nextValue = Math.min(8, viewLineSetting + 1);
+                markUnsaved();
+                if (nestedParent) {
+                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
+                } else {
+                  setRowHeightLines(String(nextValue));
+                }
+              }}
+            >
+              +
+            </button>
             <span aria-hidden="true">lines per row</span>
           </div>
         </div>
