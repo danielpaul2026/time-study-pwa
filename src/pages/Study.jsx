@@ -373,16 +373,21 @@ export default function Study() {
     setObservationLogHeight(clampObservationLogHeight(currentHeight + adjustment));
   }
 
-  const columns = Math.max(1, Math.min(12, Number(template?.columns) || 3));
-  const rowHeightLines = Math.max(1, Math.min(8, Number(template?.rowHeightLines) || 2));
+  const columns = Math.max(1, Math.min(12, Number(template?.columns) || 2));
+  const rowHeightLines = Math.max(1, Math.min(8, Number(template?.rowHeightLines) || 5));
   const currentElements = nestedParent?.children || template?.elements || [];
   const configuredRows = nestedParent?.childrenRows ?? template?.rows;
   const elementPositions = currentElements.map((element, index) =>
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index
   );
+  const legacyMinimumRows = Math.max(
+    3,
+    Math.ceil(Math.max(currentElements.length, Math.max(-1, ...elementPositions) + 1) / columns)
+  );
+  const savedRows = Number(configuredRows);
   const minimumGridRows = Math.max(
     1,
-    Math.min(50, Math.max(1, Number(configuredRows) || 1)),
+    Math.min(50, Number.isInteger(savedRows) && savedRows > 0 ? savedRows : legacyMinimumRows),
     Math.ceil((Math.max(-1, ...elementPositions) + 1) / columns)
   );
   const rowHeight = Math.max(44, rowHeightLines * 16.1 + 16);

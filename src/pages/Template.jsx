@@ -441,8 +441,8 @@ export default function Template() {
     saveTemplate({
       id: templateId || createTemplateId(),
       name: cleanName,
-      columns: nestedParent ? rootColumnCount : columnCount,
-      rows: nestedParent ? rootRowCount : rowCount,
+      columns: rootColumnCount,
+      rows: rootRowCount,
       rowHeightLines: rootLineCount,
       elements: (nestedParent ? elements : normalizePositions(elements, gridRows * columnCountForSave)).map(element => ({
         ...element,
