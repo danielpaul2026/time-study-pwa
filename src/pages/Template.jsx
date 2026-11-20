@@ -1,4 +1,5 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getTemplates, saveTemplate } from "../data/studyStore";
 import useAvailableGridRows from "../hooks/useAvailableGridRows";
@@ -13,6 +14,76 @@ const defaultColors = [
   "#e98781",
   "#9bdde5"
 ];
+
+const MAX_GRID_COLUMNS = 12;
+const MAX_GRID_ROWS = 50;
+const GRID_PICKER_CELL_SIZE = 32;
+const GRID_PICKER_GAP = 4;
+const GRID_PICKER_PADDING = 22;
+const GRID_PICKER_MARGIN = 8;
+
+function getInitialGridRows(configuredRows, elements, columns) {
+  const parsedRows = Number(configuredRows);
+  if (Number.isInteger(parsedRows) && parsedRows > 0) {
+    return Math.min(MAX_GRID_ROWS, parsedRows);
+  }
+  const lastPosition = (elements || []).reduce((maximum, element, index) => {
+    const position = Number.isInteger(element.position) && element.position >= 0
+      ? element.position
+      : index;
+    return Math.max(maximum, position);
+  }, -1);
+  return Math.min(
+    MAX_GRID_ROWS,
+    Math.max(3, Math.ceil(Math.max(elements?.length || 0, lastPosition + 1) / columns))
+  );
+}
+
+function getGridPickerLayout(anchor, rows, columns) {
+  const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const top = Math.max(GRID_PICKER_MARGIN, anchor.bottom + 6);
+  const availableWidth = Math.max(1, viewportWidth - GRID_PICKER_MARGIN * 2 - 1);
+  const availableHeight = Math.max(1, viewportHeight - top - GRID_PICKER_MARGIN - 1);
+  const cellSize = Math.max(0.1, Math.min(
+    GRID_PICKER_CELL_SIZE,
+    (availableWidth - GRID_PICKER_PADDING - GRID_PICKER_GAP * (columns - 1)) / columns,
+    (availableHeight - GRID_PICKER_PADDING - GRID_PICKER_GAP * (rows - 1)) / rows
+  ));
+  const maxColumns = Math.max(
+    columns,
+    Math.min(
+      MAX_GRID_COLUMNS,
+      Math.floor((availableWidth - GRID_PICKER_PADDING + GRID_PICKER_GAP) / (cellSize + GRID_PICKER_GAP))
+    )
+  );
+  const maxRows = Math.max(
+    rows,
+    Math.min(
+      MAX_GRID_ROWS,
+      Math.floor((availableHeight - GRID_PICKER_PADDING + GRID_PICKER_GAP) / (cellSize + GRID_PICKER_GAP))
+    )
+  );
+  const maxWidth = maxColumns * cellSize +
+    Math.max(0, maxColumns - 1) * GRID_PICKER_GAP +
+    GRID_PICKER_PADDING;
+  const left = Math.max(
+    GRID_PICKER_MARGIN,
+    Math.min(anchor.left, viewportWidth - GRID_PICKER_MARGIN - maxWidth)
+  );
+
+  return { left, top, cellSize, maxRows, maxColumns };
+}
+
+function getGridPickerDimension(index, previousIndex, currentSize, baseSize, maxSize) {
+  if (previousIndex !== null && index < previousIndex) {
+    return Math.max(baseSize, index + 1);
+  }
+  if (index >= currentSize - 1 && index !== previousIndex) {
+    return Math.min(maxSize, Math.max(currentSize, index + 2));
+  }
+  return currentSize;
+}
 
 function normalizePositions(elements, cellCount) {
   const positions = new Set();
@@ -70,8 +141,13 @@ export default function Template() {
   );
   const [ name, setName ] = useState(initialTemplate?.name || "");
   const [ elements, setElements ] = useState(initialTemplate?.elements || []);
-  const [ columns, setColumns ] = useState(String(Math.min(6, Math.max(1, Number(initialTemplate?.columns) || 2))));
-  const [ rowHeightLines, setRowHeightLines ] = useState(String(Math.min(8, Math.max(1, Number(initialTemplate?.rowHeightLines) || 5))));
+  const [ columns, setColumns ] = useState(String(Math.min(MAX_GRID_COLUMNS, Math.max(1, Number(initialTemplate?.columns) || 2))));
+  const [ rows, setRows ] = useState(() => getInitialGridRows(
+    initialTemplate?.rows,
+    initialTemplate?.elements,
+    Math.min(MAX_GRID_COLUMNS, Math.max(1, Number(initialTemplate?.columns) || 2))
+  ));
+  const [ rowHeightLines ] = useState(String(Math.min(8, Math.max(1, Number(initialTemplate?.rowHeightLines) || 5))));
   const [ isDirty, setIsDirty ] = useState(!initialTemplate);
   const [ isAdding, setIsAdding ] = useState(false);
   const [ elementName, setElementName ] = useState("");
@@ -82,6 +158,24 @@ export default function Template() {
   const [ showElementProperties, setShowElementProperties ] = useState(false);
   const [ nestedParentId, setNestedParentId ] = useState(null);
   const [ activeElementIndex, setActiveElementIndex ] = useState(null);
+  const [ isGridPickerOpen, setIsGridPickerOpen ] = useState(false);
+  const [ gridPickerSize, setGridPickerSize ] = useState({ rows: 3, columns: 3 });
+  const [ gridPickerSelection, setGridPickerSelection ] = useState({ rows: 3, columns: 3 });
+  const [ gridPickerLayout, setGridPickerLayout ] = useState({
+    left: GRID_PICKER_MARGIN,
+    top: 54,
+    cellSize: GRID_PICKER_CELL_SIZE,
+    maxRows: 3,
+    maxColumns: 3
+  });
+  const gridPickerRef = useRef(null);
+  const gridPickerGridRef = useRef(null);
+  const gridPickerPointerId = useRef(null);
+  const gridPickerSizeRef = useRef({ rows: 3, columns: 3 });
+  const gridPickerBaseSize = useRef({ rows: 3, columns: 3 });
+  const gridPickerLimits = useRef({ rows: 3, columns: 3 });
+  const gridPickerSelectionRef = useRef({ rows: 3, columns: 3 });
+  const gridPickerLastCell = useRef(null);
   const elementPointerDrag = useRef(null);
   const didPointerDrag = useRef(false);
   const lastElementClick = useRef({ id: null, time: 0 });
@@ -311,21 +405,29 @@ export default function Template() {
     event.preventDefault();
     const cleanName = name.trim();
     const columnCount = Number(viewColumnSetting);
+    const rowCount = Number(viewRowSetting);
     const lineCount = Number(viewLineSetting);
     const rootColumnCount = Number(columns);
+    const rootRowCount = Number(rows);
     const rootLineCount = Number(rowHeightLines);
     if (
       !cleanName ||
       elements.length === 0 ||
       !Number.isInteger(rootColumnCount) ||
       rootColumnCount < 1 ||
-      rootColumnCount > 6 ||
+      rootColumnCount > MAX_GRID_COLUMNS ||
+      !Number.isInteger(rootRowCount) ||
+      rootRowCount < 1 ||
+      rootRowCount > MAX_GRID_ROWS ||
       !Number.isInteger(rootLineCount) ||
       rootLineCount < 1 ||
       rootLineCount > 8 ||
       !Number.isInteger(columnCount) ||
       columnCount < 1 ||
-      columnCount > 6 ||
+      columnCount > MAX_GRID_COLUMNS ||
+      !Number.isInteger(rowCount) ||
+      rowCount < 1 ||
+      rowCount > MAX_GRID_ROWS ||
       !Number.isInteger(lineCount) ||
       lineCount < 1 ||
       lineCount > 8 ||
@@ -340,11 +442,12 @@ export default function Template() {
       id: templateId || createTemplateId(),
       name: cleanName,
       columns: nestedParent ? rootColumnCount : columnCount,
+      rows: nestedParent ? rootRowCount : rowCount,
       rowHeightLines: rootLineCount,
       elements: (nestedParent ? elements : normalizePositions(elements, gridRows * columnCountForSave)).map(element => ({
         ...element,
         ...(nestedParent?.id === element.id
-          ? { childrenColumns: columnCount, childrenRowHeightLines: lineCount }
+          ? { childrenColumns: columnCount, childrenRows: rowCount, childrenRowHeightLines: lineCount }
           : {}),
         children: element.children?.map(child => ({
           ...child,
@@ -368,10 +471,24 @@ export default function Template() {
   const preferredLineCount = Math.min(8, Math.max(1, Number(nestedParent?.childrenRowHeightLines ?? rowHeightLines) || 5));
   const preferredRowHeight = Math.max(28, preferredLineCount * 16.1 + 8);
   const { gridRef, availableRows, availableHeight } = useAvailableGridRows(1, preferredRowHeight);
-  const preferredColumns = Math.min(6, Math.max(1, Number(nestedParent?.childrenColumns ?? columns) || 2));
+  const preferredColumns = Math.min(MAX_GRID_COLUMNS, Math.max(1, Number(nestedParent?.childrenColumns ?? columns) || 2));
+  const preferredRows = getInitialGridRows(
+    nestedParent?.childrenRows ?? (nestedParent ? undefined : rows),
+    currentElements,
+    preferredColumns
+  );
   const baseRows = Math.max(1, availableRows || 1);
-  const gridRows = Math.max(baseRows, Math.ceil(currentElements.length / 6));
-  const columnCount = Math.min(6, Math.max(1, preferredColumns, Math.ceil(currentElements.length / gridRows)));
+  const lastElementPosition = currentElements.reduce((maximum, element, index) => {
+    const position = Number.isInteger(element.position) && element.position >= 0
+      ? element.position
+      : index;
+    return Math.max(maximum, position);
+  }, -1);
+  const gridRows = Math.max(
+    preferredRows,
+    Math.ceil(Math.max(currentElements.length, lastElementPosition + 1) / preferredColumns)
+  );
+  const columnCount = preferredColumns;
   const availableHeightForRows = Math.max(1, availableHeight - Math.max(0, gridRows - 1) * 4);
   const rowHeight = Math.max(
     1,
@@ -379,6 +496,7 @@ export default function Template() {
   );
   const columnCountForSave = columnCount;
   const viewColumnSetting = columnCount;
+  const viewRowSetting = gridRows;
   const viewLineSetting = preferredLineCount;
   const visibleElements = normalizePositions(currentElements, gridRows * columnCount);
   const elementsByPosition = new Map(visibleElements.map((element, index) => [
@@ -393,17 +511,131 @@ export default function Template() {
   const settingsAreValid =
     Number.isInteger(Number(columns)) &&
     Number(columns) >= 1 &&
-    Number(columns) <= 6 &&
+    Number(columns) <= MAX_GRID_COLUMNS &&
+    Number.isInteger(Number(rows)) &&
+    Number(rows) >= 1 &&
+    Number(rows) <= MAX_GRID_ROWS &&
     Number.isInteger(Number(rowHeightLines)) &&
     Number(rowHeightLines) >= 1 &&
     Number(rowHeightLines) <= 8 &&
     Number.isInteger(Number(viewColumnSetting)) &&
     Number(viewColumnSetting) >= 1 &&
-    Number(viewColumnSetting) <= 6 &&
-    columnCount <= 6 &&
+    Number(viewColumnSetting) <= MAX_GRID_COLUMNS &&
+    Number.isInteger(Number(viewRowSetting)) &&
+    Number(viewRowSetting) >= 1 &&
+    Number(viewRowSetting) <= MAX_GRID_ROWS &&
+    columnCount <= MAX_GRID_COLUMNS &&
     Number.isInteger(Number(viewLineSetting)) &&
     Number(viewLineSetting) >= 1 &&
     Number(viewLineSetting) <= 8;
+
+  function updateGridPickerCell(row, column) {
+    const selection = { rows: row + 1, columns: column + 1 };
+    gridPickerSelectionRef.current = selection;
+    setGridPickerSelection(selection);
+
+    const previousCell = gridPickerLastCell.current;
+    const currentSize = gridPickerSizeRef.current;
+    const baseSize = gridPickerBaseSize.current;
+    const nextSize = {
+      rows: getGridPickerDimension(
+        row,
+        previousCell?.row ?? null,
+        currentSize.rows,
+        baseSize.rows,
+        gridPickerLimits.current.rows
+      ),
+      columns: getGridPickerDimension(
+        column,
+        previousCell?.column ?? null,
+        currentSize.columns,
+        baseSize.columns,
+        gridPickerLimits.current.columns
+      )
+    };
+    gridPickerLastCell.current = { row, column };
+    gridPickerSizeRef.current = nextSize;
+    if (nextSize.rows !== currentSize.rows || nextSize.columns !== currentSize.columns) {
+      setGridPickerSize(nextSize);
+    }
+  }
+
+  function selectGridPickerSize() {
+    const { rows: rowCount, columns: columnCount } = gridPickerSelectionRef.current;
+    markUnsaved();
+    if (nestedParent) {
+      updateElement(nestedParent.id, {
+        childrenRows: rowCount,
+        childrenColumns: columnCount
+      });
+    } else {
+      setRows(rowCount);
+      setColumns(String(columnCount));
+    }
+    setIsGridPickerOpen(false);
+  }
+
+  function handleGridPickerPointerDown(event) {
+    const cell = event.target.closest("[data-picker-row]");
+    if (!cell) return;
+    event.preventDefault();
+    gridPickerPointerId.current = event.pointerId;
+    gridPickerLastCell.current = null;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updateGridPickerCell(Number(cell.dataset.pickerRow), Number(cell.dataset.pickerColumn));
+  }
+
+  function handleGridPickerPointerMove(event) {
+    if (gridPickerPointerId.current !== event.pointerId) return;
+    const grid = gridPickerGridRef.current;
+    if (!grid) return;
+    const bounds = grid.getBoundingClientRect();
+    const column = Math.floor((event.clientX - bounds.left) /
+      (gridPickerLayout.cellSize + GRID_PICKER_GAP));
+    const row = Math.floor((event.clientY - bounds.top) /
+      (gridPickerLayout.cellSize + GRID_PICKER_GAP));
+    if (
+      row < 0 ||
+      column < 0 ||
+      row >= gridPickerLimits.current.rows ||
+      column >= gridPickerLimits.current.columns
+    ) return;
+    updateGridPickerCell(row, column);
+  }
+
+  function handleGridPickerPointerUp(event) {
+    if (gridPickerPointerId.current !== event.pointerId) return;
+    handleGridPickerPointerMove(event);
+    gridPickerPointerId.current = null;
+    gridPickerLastCell.current = null;
+    selectGridPickerSize();
+  }
+
+  useEffect(() => {
+    if (!isGridPickerOpen) return undefined;
+    function resizePicker() {
+      const currentSize = gridPickerSizeRef.current;
+      const layout = getGridPickerLayout(
+        gridPickerRef.current.getBoundingClientRect(),
+        currentSize.rows,
+        currentSize.columns
+      );
+      gridPickerLimits.current = {
+        rows: layout.maxRows,
+        columns: layout.maxColumns
+      };
+      setGridPickerLayout(layout);
+    }
+    function closePickerOnEscape(event) {
+      if (event.key === "Escape") setIsGridPickerOpen(false);
+    }
+    document.addEventListener("keydown", closePickerOnEscape);
+    window.addEventListener("resize", resizePicker);
+    return () => {
+      document.removeEventListener("keydown", closePickerOnEscape);
+      window.removeEventListener("resize", resizePicker);
+    };
+  }, [ isGridPickerOpen ]);
 
   return (
     <main className="template-editor">
@@ -427,6 +659,55 @@ export default function Template() {
           >
             {nestedParent ? "Back" : "Menu"}
           </button>
+          <div className="grid-size-picker-container" ref={gridPickerRef}>
+            <button
+              className="grid-size-picker-trigger"
+              type="button"
+              aria-label={`Choose grid size, currently ${viewRowSetting} rows by ${viewColumnSetting} columns`}
+              aria-expanded={isGridPickerOpen}
+              aria-controls="template-grid-size-picker"
+              onClick={() => {
+                const pickerSize = {
+                  rows: Math.max(3, viewRowSetting),
+                  columns: Math.max(3, viewColumnSetting)
+                };
+                const pickerLayout = getGridPickerLayout(
+                  gridPickerRef.current.getBoundingClientRect(),
+                  pickerSize.rows,
+                  pickerSize.columns
+                );
+                const selection = {
+                  rows: viewRowSetting,
+                  columns: viewColumnSetting
+                };
+                gridPickerLimits.current = {
+                  rows: pickerLayout.maxRows,
+                  columns: pickerLayout.maxColumns
+                };
+                gridPickerBaseSize.current = pickerSize;
+                gridPickerSizeRef.current = pickerSize;
+                gridPickerSelectionRef.current = selection;
+                gridPickerLastCell.current = null;
+                setGridPickerLayout(pickerLayout);
+                setGridPickerSize(pickerSize);
+                setGridPickerSelection(selection);
+                setIsGridPickerOpen(open => !open);
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="3" y="3" width="5" height="5" rx="1" />
+                <rect x="9.5" y="3" width="5" height="5" rx="1" />
+                <rect x="16" y="3" width="5" height="5" rx="1" />
+                <rect x="3" y="9.5" width="5" height="5" rx="1" />
+                <rect x="9.5" y="9.5" width="5" height="5" rx="1" />
+                <rect x="16" y="9.5" width="5" height="5" rx="1" />
+                <rect x="3" y="16" width="5" height="5" rx="1" />
+                <rect x="9.5" y="16" width="5" height="5" rx="1" />
+                <rect x="16" y="16" width="5" height="5" rx="1" />
+              </svg>
+              <span>{viewRowSetting}x{viewColumnSetting}</span>
+            </button>
+          </div>
           <input
             className="template-name-input"
             id="template-name"
@@ -454,80 +735,79 @@ export default function Template() {
           </button>
         </header>
 
-        <div className="template-grid-settings">
-          <div className="template-grid-setting template-grid-setting-columns">
-            <input
-              type="range"
-              min="1"
-              max="6"
-              step="1"
-              aria-label="Columns"
-              value={viewColumnSetting}
-              onChange={event => {
-                markUnsaved();
-                if (nestedParent) {
-                  updateElement(nestedParent.id, { childrenColumns: Number(event.target.value) });
-                } else {
-                  setColumns(event.target.value);
-                }
-              }}
+        {isGridPickerOpen && createPortal(
+          <>
+            <div
+              className="grid-size-picker-backdrop"
+              aria-hidden="true"
+              onClick={() => setIsGridPickerOpen(false)}
             />
-            <output>{viewColumnSetting}</output>
-            <span aria-hidden="true">columns</span>
-          </div>
-          <div className="template-grid-setting template-grid-setting-rows">
-            <button
-              type="button"
-              aria-label="Decrease lines per row"
-              disabled={viewLineSetting <= 1}
-              onClick={() => {
-                const nextValue = Math.max(1, viewLineSetting - 1);
-                markUnsaved();
-                if (nestedParent) {
-                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
-                } else {
-                  setRowHeightLines(String(nextValue));
-                }
+            <div
+              className="grid-size-picker"
+              id="template-grid-size-picker"
+              role="group"
+              aria-label="Choose button grid size"
+              style={{
+                left: `${gridPickerLayout.left}px`,
+                top: `${gridPickerLayout.top}px`,
+                width: `${gridPickerSize.columns * gridPickerLayout.cellSize +
+                  (gridPickerSize.columns - 1) * GRID_PICKER_GAP + GRID_PICKER_PADDING}px`,
+                height: `${gridPickerSize.rows * gridPickerLayout.cellSize +
+                  (gridPickerSize.rows - 1) * GRID_PICKER_GAP + GRID_PICKER_PADDING}px`
               }}
             >
-              -
-            </button>
-            <input
-              type="number"
-              min="1"
-              max="8"
-              step="1"
-              aria-label="Lines per row"
-              value={viewLineSetting}
-              onChange={event => {
-                const nextValue = Math.min(8, Math.max(1, Number(event.target.value) || 1));
-                markUnsaved();
-                if (nestedParent) {
-                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
-                } else {
-                  setRowHeightLines(String(nextValue));
-                }
-              }}
-            />
-            <button
-              type="button"
-              aria-label="Increase lines per row"
-              disabled={viewLineSetting >= 8}
-              onClick={() => {
-                const nextValue = Math.min(8, viewLineSetting + 1);
-                markUnsaved();
-                if (nestedParent) {
-                  updateElement(nestedParent.id, { childrenRowHeightLines: nextValue });
-                } else {
-                  setRowHeightLines(String(nextValue));
-                }
-              }}
-            >
-              +
-            </button>
-            <span aria-hidden="true">lines per row</span>
-          </div>
-        </div>
+              <div
+                ref={gridPickerGridRef}
+                className="grid-size-picker-grid"
+                style={{
+                  gridTemplateColumns: `repeat(${gridPickerSize.columns}, ${gridPickerLayout.cellSize}px)`,
+                  gridTemplateRows: `repeat(${gridPickerSize.rows}, ${gridPickerLayout.cellSize}px)`
+                }}
+                onPointerDown={handleGridPickerPointerDown}
+                onPointerMove={handleGridPickerPointerMove}
+                onPointerUp={handleGridPickerPointerUp}
+                onPointerCancel={() => {
+                  gridPickerPointerId.current = null;
+                  gridPickerLastCell.current = null;
+                }}
+                onLostPointerCapture={() => {
+                  gridPickerPointerId.current = null;
+                  gridPickerLastCell.current = null;
+                }}
+              >
+                {Array.from(
+                  { length: gridPickerSize.rows * gridPickerSize.columns },
+                  (_, index) => {
+                    const row = Math.floor(index / gridPickerSize.columns);
+                    const column = index % gridPickerSize.columns;
+                    const isSelected = row < gridPickerSelection.rows &&
+                      column < gridPickerSelection.columns;
+                    const isSelectionEnd = row + 1 === gridPickerSelection.rows &&
+                      column + 1 === gridPickerSelection.columns;
+                    return (
+                      <button
+                        className={`grid-size-picker-cell${isSelected ? " is-selected" : ""}${isSelectionEnd ? " is-selection-end" : ""}`}
+                        key={`${row}-${column}`}
+                        type="button"
+                        data-picker-row={row}
+                        data-picker-column={column}
+                        aria-label={`${row + 1} rows by ${column + 1} columns`}
+                        aria-pressed={isSelectionEnd}
+                        onClick={event => {
+                          if (event.detail !== 0) return;
+                          gridPickerLastCell.current = null;
+                          updateGridPickerCell(row, column);
+                          selectGridPickerSize();
+                        }}
+                      />
+                    );
+                  }
+                )}
+              </div>
+            </div>
+          </>,
+          document.body
+        )}
 
         {isAdding && (
           <div className="element-editor-backdrop" onClick={() => {
@@ -715,6 +995,7 @@ export default function Template() {
                       isNested: true,
                       children: [],
                       childrenColumns: Number(columns),
+                      childrenRows: Number(rows),
                       childrenRowHeightLines: Number(rowHeightLines)
                     })}
                   >

@@ -352,15 +352,18 @@ export default function Study() {
   const columns = Math.max(1, Math.min(12, Number(template?.columns) || 3));
   const rowHeightLines = Math.max(1, Math.min(8, Number(template?.rowHeightLines) || 2));
   const currentElements = nestedParent?.children || template?.elements || [];
+  const configuredRows = nestedParent?.childrenRows ?? template?.rows;
   const elementPositions = currentElements.map((element, index) =>
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index
   );
   const minimumGridRows = Math.max(
     1,
+    Math.min(50, Math.max(1, Number(configuredRows) || 1)),
     Math.ceil((Math.max(-1, ...elementPositions) + 1) / columns)
   );
   const rowHeight = Math.max(44, rowHeightLines * 16.1 + 16);
-  const { gridRef, gridRows } = useAvailableGridRows(minimumGridRows, rowHeight);
+  const { gridRef, gridRows: availableGridRows } = useAvailableGridRows(minimumGridRows, rowHeight);
+  const gridRows = Number(configuredRows) > 0 ? minimumGridRows : availableGridRows;
   const elementsByPosition = new Map(currentElements.map((element, index) => [
     Number.isInteger(element.position) && element.position >= 0 ? element.position : index,
     element
