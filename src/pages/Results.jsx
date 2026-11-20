@@ -69,14 +69,24 @@ export default function Results() {
     let previousTimestamp = session.startTime;
 
     if (sessionIndex > 0 && !events.some(event => event.type === "gap")) {
-      rows.push({ type: "gap", id: `gap-${session.id}`, studyNumber: sessionIndex + 1 });
+      rows.push({
+        type: "gap",
+        id: `gap-${session.id}`,
+        studyNumber: sessionIndex + 1,
+        note: session.scopeNote || ""
+      });
     }
 
     getVisibleStudyEvents(events).forEach(({ event, sourceEvent, index: eventIndex }) => {
       if (event.type === "gap") {
         previousTimestamp = event.timestamp;
         if (sessionIndex > 0 || eventIndex > 0) {
-          rows.push({ type: "gap", id: `gap-${session.id}-${eventIndex}`, studyNumber: sessionIndex + 1 });
+          rows.push({
+            type: "gap",
+            id: `gap-${session.id}-${eventIndex}`,
+            studyNumber: sessionIndex + 1,
+            note: event.note || ""
+          });
         }
         return;
       }
@@ -289,7 +299,10 @@ export default function Results() {
                   if (row.type === "gap") {
                     return (
                       <tr className="results-gap-row" key={row.id}>
-                        <td colSpan="11">Gap in data · Study {row.studyNumber}</td>
+                        <td colSpan="11">
+                          Study {row.studyNumber}
+                          {row.note ? ` — ${row.note}` : ""}
+                        </td>
                       </tr>
                     );
                   }

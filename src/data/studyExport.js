@@ -65,14 +65,21 @@ function createSubjectRows(sessions) {
     let previousTimestamp = Number(session.startTime);
 
     if (sessionIndex > 0 && !events.some(event => event.type === "gap")) {
-      rows.push([ `Gap in data · Study ${sessionIndex + 1}` ]);
+      rows.push([
+        "", "", "", "", session.scopeNote || "",
+        "", "", "", "", "", sessionIndex + 1
+      ]);
+      rows[rows.length - 1][0] = `Study ${sessionIndex + 1}`;
     }
 
     getVisibleStudyEvents(events).forEach(({ event, index: eventIndex }) => {
       if (event.type === "gap") {
         previousTimestamp = Number(event.timestamp);
         if (sessionIndex > 0 || eventIndex > 0) {
-          rows.push([ `Gap in data · Study ${sessionIndex + 1}` ]);
+          rows.push([
+            `Study ${sessionIndex + 1}`, "", "", "",
+            event.note || "", "", "", "", "", "", sessionIndex + 1
+          ]);
         }
         return;
       }

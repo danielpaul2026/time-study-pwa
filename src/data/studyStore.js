@@ -177,8 +177,16 @@ export function updateStudySessionEvent(sessionId, eventIndex, changes) {
   if (!session || !Array.isArray(session.events) || !session.events[eventIndex]) {
     return false;
   }
-
   session.events[eventIndex] = { ...session.events[eventIndex], ...changes };
+  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
+  return true;
+}
+
+export function updateStudySessionScopeNote(sessionId, note) {
+  const sessions = getStudySessions();
+  const session = sessions.find(item => item.id === sessionId);
+  if (!session) return false;
+  session.scopeNote = note;
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions));
   return true;
 }

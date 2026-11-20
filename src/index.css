@@ -302,6 +302,10 @@ input {
   background: #d3e2e9;
 }
 
+.study-log-resize-handle.is-hidden {
+  display: none;
+}
+
 .template-grid-cell,
 .study-grid-cell {
   display: grid;
@@ -856,9 +860,9 @@ input {
 }
 
 .results-gap-row td {
-  background: #fff8df;
-  color: #737d83;
-  font-style: italic;
+  background: rgb(177 128 28 / 78%);
+  color: #fff;
+  font-weight: 700;
   text-align: center;
 }
 
@@ -1022,7 +1026,7 @@ input {
 }
 
 .study-appbar {
-  grid-template-columns: 48px 100px minmax(0, 1fr) auto;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   gap: 4px;
   padding: 3px 7px;
 }
@@ -1045,19 +1049,6 @@ input {
   border: 0;
   background: transparent;
   color: #fff;
-  font-size: 11px;
-}
-
-.study-appbar-subject select {
-  width: 100%;
-  min-width: 0;
-  min-height: 36px;
-  padding: 4px 5px;
-  border: 1px solid rgb(255 255 255 / 70%);
-  border-radius: 4px;
-  background: #fff;
-  color: #17364b;
-  font: inherit;
   font-size: 11px;
 }
 
@@ -1149,73 +1140,143 @@ input {
   flex-basis: 180px;
 }
 
-.study-readout {
-  display: grid;
-  grid-template-columns: minmax(72px, 1fr) auto auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 38px;
-  padding: 5px 10px;
-  border-bottom: 1px solid #d1d3d5;
-  color: #50585e;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.study-readout strong {
-  color: #303940;
-  font-size: 13px;
-}
-
 .observation-log-heading {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 12.5vw;
   border-bottom: 1px solid #d5d8da;
 }
 
-.observation-log-heading h2 {
-  margin: 0;
-  color: #515a60;
-  font-size: 12px;
-  font-weight: 400;
+.observation-log-heading.is-running {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.observation-log-heading.is-running .observation-log-title {
+  grid-column: 2;
+  justify-self: center;
+  align-items: center;
+}
+
+.observation-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.observation-log-heading .observation-results-button {
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.observation-log-subject {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  justify-self: center;
+}
+
+.observation-log-subject select {
+  width: auto;
+  min-height: 40px;
+  padding: 4px 8px;
+  appearance: none;
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 5px;
+  background: #1069a5;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  text-align: center;
+  text-align-last: center;
+}
+
+.observation-log-subject select:focus-visible {
+  outline: 3px solid #f0a521;
+  outline-offset: 2px;
 }
 
 .observation-log-title {
   display: flex;
-  flex: 1;
-  align-items: baseline;
+  flex-direction: row;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+  justify-self: end;
 }
 
-.observation-log-title span {
+.observation-log-title > span {
   overflow: hidden;
   color: #1769a1;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .observation-log-heading button {
   flex: 0 0 auto;
-  min-height: 30px;
+  min-height: 40px;
   padding: 2px 8px;
   border: 0;
   color: #1769a1;
   font-size: 12px;
 }
 
+.observation-log-heading .observation-log-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-height: 40px;
+  line-height: 12px;
+  padding: 2px 0;
+  background: transparent;
+  color: #515a60;
+  white-space: nowrap;
+}
+
+.observation-log-heading-label {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.observation-log-toggle-icon {
+  font-family: monospace;
+  font-size: 10px;
+  letter-spacing: 0;
+}
+
+.study-observation-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 58px;
+  color: #515a60;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 12px;
+  text-align: right;
+}
+
+.study-observation-timer strong {
+  font-size: 12px;
+}
+
 .observation-log-heading .observation-log-add {
   min-height: 28px;
-  padding: 2px 8px;
+  padding: 2px 6px;
   border: 1px solid #aab0b4;
   border-bottom: 0;
   border-radius: 5px 5px 0 0;
   background: #e7ecef;
   color: #17364b;
+  font-size: 10px;
   font-weight: 600;
 }
 
@@ -1228,7 +1289,9 @@ input {
 }
 
 .observation-log-list {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
   overflow-y: auto;
   margin: 0;
@@ -1238,13 +1301,25 @@ input {
 
 .observation-log-list li {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 32px;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) 32px auto auto;
   align-items: center;
   gap: 8px;
   min-height: 40px;
   padding: 4px 10px;
   border-bottom: 1px solid #eceeef;
   font-size: 12px;
+}
+
+.observation-log-list li.is-placeholder {
+  background: #fff;
+}
+
+.observation-log-list li.is-study-marker {
+  grid-template-columns: minmax(0, 1fr) 32px;
+  background: rgb(177 128 28 / 78%);
+  color: #fff;
+  font-weight: 700;
 }
 
 .observation-log-list li .observation-action-name {
@@ -1259,6 +1334,8 @@ input {
   overflow: hidden;
   color: #1769a1;
   font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.25px;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1271,7 +1348,9 @@ input {
 }
 
 .observation-log-list li .gap-in-data {
-  grid-column: 1 / -1;
+  grid-column: 1;
+  color: inherit;
+  text-align: left;
 }
 
 .observation-log-list li time {
@@ -1282,6 +1361,7 @@ input {
 
 .observation-log-list li .observation-elapsed {
   color: #525a60;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1512,18 +1592,6 @@ input {
   border-color: #0b5686;
   background: #0b5686;
   color: #fff;
-}
-
-.gap-in-data {
-  grid-column: 1 / -1;
-  color: #737d83;
-  font-style: italic;
-  text-align: center;
-}
-
-.observation-log-list li .gap-in-data {
-  color: #737d83;
-  text-align: left;
 }
 
 .event-list .gap-in-data {

@@ -10,7 +10,8 @@ import {
   mergeStudySessionEvents,
   saveStudySession,
   saveTemplate,
-  updateStudySessionEvent
+  updateStudySessionEvent,
+  updateStudySessionScopeNote
 } from "../data/studyStore";
 import useAvailableGridRows from "../hooks/useAvailableGridRows";
 
@@ -30,7 +31,7 @@ function canMergeEntries(sourceEntry, destinationEntry) {
 
 function getEventName(event) {
   return event.elementPrime
-    ? `${event.elementPrime}${event.elementSub ? `: ${event.elementSub}` : ""}`
+    ? `${event.elementPrime}${event.elementSub ? ` { ${event.elementSub}` : ""}`
     : event.name;
 }
 
@@ -47,6 +48,8 @@ export default function Study() {
   );
   const [ timestamp, setTimestamp ] = useState(null);
   const [ actionEvents, setActionEvents ] = useState([]);
+  const [ placeholderActionFields, setPlaceholderActionFields ] = useState({ count: null, note: "" });
+  const [ placeholderTimestamp, setPlaceholderTimestamp ] = useState(null);
   const [ clockNow, setClockNow ] = useState(0);
   const [ studySessions, setStudySessions ] = useState(() => getStudySessions());
   const [ nestedParent, setNestedParent ] = useState(null);
@@ -57,6 +60,7 @@ export default function Study() {
   const [ newElementName, setNewElementName ] = useState("");
   const [ addPosition, setAddPosition ] = useState(null);
   const [ observationLogHeight, setObservationLogHeight ] = useState(null);
+  const [ isObservationLogExpanded, setIsObservationLogExpanded ] = useState(true);
   const studyPageRef = useRef(null);
   const studyAppbarRef = useRef(null);
   const studyLogSectionRef = useRef(null);
@@ -84,8 +88,15 @@ export default function Study() {
     );
     setTimestamp(startTime);
     setClockNow(startTime);
+    setPlaceholderTimestamp(startTime);
+    setPlaceholderActionFields({ count: null, note: "" });
     setActionEvents(hasPreviousData
-      ? [{ type: "gap", name: "Gap in data", timestamp: startTime }]
+      ? [{
+          type: "gap",
+          name: `Study ${previousSessions.length + 1}`,
+          note: "",
+          timestamp: startTime
+        }]
       : []);
   }
 
@@ -93,12 +104,16 @@ export default function Study() {
     if (timestamp === null) return;
 
     const eventTimestamp = Date.now();
+    const describedElement = describeElement(element, parentElement);
     const actionEvent = {
       id: createStudyEventId(),
-      ...describeElement(element, parentElement),
-      note: "",
+      ...describedElement,
+      count: placeholderActionFields.count ?? describedElement.count,
+      note: placeholderActionFields.note,
       timestamp: eventTimestamp
     };
+    setPlaceholderActionFields({ count: null, note: "" });
+    setPlaceholderTimestamp(eventTimestamp);
 
     if (pendingMergeTarget) {
       const mergedEvents = mergeStudyEvents(
@@ -129,6 +144,13 @@ export default function Study() {
   }
 
   function updateEventTarget(target, changes) {
+    if (target.source === "saved-study") {
+      if (!updateStudySessionScopeNote(target.sessionId, changes.note || "")) {
+        throw new Error(`Unable to update scope note for study session ${target.sessionId}.`);
+      }
+      setStudySessions(getStudySessions());
+      return;
+    }
     if (target.source === "current") {
       updateActionEvent(target.index, changes);
       return;
@@ -277,6 +299,8 @@ export default function Study() {
     setPendingMergeTarget(null);
     setStudySessions(getStudySessions());
     setActionEvents([]);
+    setPlaceholderActionFields({ count: null, note: "" });
+    setPlaceholderTimestamp(null);
     setTimestamp(null);
   }
 
@@ -385,12 +409,25 @@ export default function Study() {
       event,
       sourceEvent,
       sessionStartTime: session.startTime,
-      target: { source: "saved", sessionId: session.id, index, eventId: sourceEvent.id }
+      studyNumber: sessionIndex + 1,
+      target: event.type === "gap"
+        ? { source: "saved", sessionId: session.id, index, eventId: sourceEvent.id }
+        : { source: "saved", sessionId: session.id, index, eventId: sourceEvent.id }
     }));
     if (sessionIndex === 0 || events.some(event => event.type === "gap")) return sessionEvents;
 
     return [
-      { event: { type: "gap", name: "Gap in data", timestamp: session.startTime }, target: null },
+      {
+        event: {
+          type: "gap",
+          name: `Study ${sessionIndex + 1}`,
+          note: session.scopeNote || "",
+          timestamp: session.startTime
+        },
+        sourceEvent: { id: `study-${session.id}`, count: 1, note: session.scopeNote || "" },
+        studyNumber: sessionIndex + 1,
+        target: { source: "saved-study", sessionId: session.id, studyNumber: sessionIndex + 1 }
+      },
       ...sessionEvents
     ];
   });
@@ -398,9 +435,42 @@ export default function Study() {
     event,
     sourceEvent,
     sessionStartTime: timestamp,
+    studyNumber: previousSessions.length + 1,
     target: { source: "current", index, eventId: sourceEvent.id }
   }));
-  const visibleEvents = [ ...previousEvents, ...currentEvents ];
+  const placeholderEvent = timestamp !== null
+    ? [{
+        event: {
+          type: "placeholder",
+          name: "<Select Action>",
+          count: placeholderActionFields.count,
+          note: placeholderActionFields.note,
+          timestamp
+        },
+        sourceEvent: {
+          id: "placeholder",
+          count: placeholderActionFields.count,
+          note: placeholderActionFields.note
+        },
+        sessionStartTime: timestamp,
+        target: { source: "placeholder" }
+      }]
+    : [];
+  const allVisibleEvents = [ ...previousEvents, ...currentEvents, ...placeholderEvent ];
+  const actionItems = allVisibleEvents.filter(item =>
+    item.event.type !== "gap" && item.event.type !== "placeholder"
+  );
+  let visibleEvents;
+  if (timestamp !== null && !isObservationLogExpanded) {
+    visibleEvents = [
+      ...(actionItems.length ? [ actionItems[actionItems.length - 1] ] : []),
+      ...placeholderEvent
+    ];
+  } else if (timestamp === null && !isObservationLogExpanded) {
+    visibleEvents = actionItems.length ? [ actionItems[actionItems.length - 1] ] : [];
+  } else {
+    visibleEvents = allVisibleEvents;
+  }
   const selectedLogIndex = visibleEvents.findIndex(item =>
     matchesEventTarget(item.target, selectedEventTarget)
   );
@@ -418,7 +488,9 @@ export default function Study() {
   const canMergeWithNextAction = timestamp !== null &&
     selectedLogEntry?.target.source === "current" &&
     selectedLogIndex === visibleEvents.length - 1;
-  const visibleActionCount = visibleEvents.filter(item => item.event.type !== "gap").length;
+  const visibleActionCount = visibleEvents.filter(item =>
+    item.event.type !== "gap" && item.event.type !== "placeholder"
+  ).length;
   const observationLogHeightBounds = getObservationLogHeightBounds();
   const observationLogHeightValue = observationLogHeight ??
     (timestamp !== null ? 180 : 218);
@@ -431,28 +503,11 @@ export default function Study() {
             <button
               className="study-menu-button"
               type="button"
+              disabled={timestamp !== null}
               onClick={() => nestedParent ? setNestedParent(null) : navigate("/")}
             >
               {nestedParent ? "Back" : "Menu"}
             </button>
-            <div className="study-appbar-subject">
-              <select
-                id="study-subject"
-                aria-label="Subject"
-                value={selectedSubjectNumber}
-                disabled={timestamp !== null}
-                onChange={event => {
-                  setSelectedSubjectNumber(event.target.value);
-                  setActionEvents([]);
-                  setSelectedEventTarget(null);
-                  setNestedParent(null);
-                }}
-              >
-                {subjects.map(subject => (
-                  <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
-                ))}
-              </select>
-            </div>
             <h1>{nestedParent?.name || template.name}</h1>
             <button
               className={`record-button${timestamp !== null ? " is-recording" : ""}`}
@@ -527,7 +582,7 @@ export default function Study() {
             })}
           </div>
           <div
-            className="study-log-resize-handle"
+            className={`study-log-resize-handle${isObservationLogExpanded ? "" : " is-hidden"}`}
             role="separator"
             aria-label="Resize observation log"
             aria-orientation="horizontal"
@@ -546,22 +601,58 @@ export default function Study() {
           <section
             ref={studyLogSectionRef}
             id="study-observation-log"
-            className={`study-observation-log${timestamp !== null ? " is-recording" : ""}`}
+            className={`study-observation-log${timestamp !== null ? " is-recording" : ""}${isObservationLogExpanded ? "" : " is-minimized"}`}
             aria-label="Recorded observation log"
-            style={observationLogHeight === null ? undefined : {
-              flexBasis: `${observationLogHeight}px`
-            }}
+            style={!isObservationLogExpanded
+              ? { flexBasis: `${timestamp !== null ? 122 : 84}px` }
+              : observationLogHeight === null ? undefined : { flexBasis: `${observationLogHeight}px` }}
           >
-            {timestamp !== null && (
-              <div className="study-readout" role="status">
-                <span>RECORDING</span>
-                <strong>{formatStudyTime(clockNow - timestamp)}</strong>
-                <span>{visibleActionCount} actions</span>
-              </div>
-            )}
-            <div className="observation-log-heading">
+            <div className={`observation-log-heading${timestamp !== null ? " is-running" : ""}`}>
+              {timestamp === null && (
+                <>
+                  <div className="observation-log-actions">
+                    <button
+                      className="observation-results-button"
+                      type="button"
+                      onClick={() => navigate(`/Results?templateId=${encodeURIComponent(template.id)}&subjectNumber=${selectedSubjectNumber}`)}
+                    >
+                      Results
+                    </button>
+                    {!hasEmptyGridCell && (
+                      <button
+                        className="observation-log-add"
+                        type="button"
+                        onClick={() => {
+                          setAddPosition(null);
+                          setNewElementName("");
+                          setIsAddingElement(true);
+                        }}
+                      >
+                        &lt;Add&gt;
+                      </button>
+                    )}
+                  </div>
+                  <div className="observation-log-subject">
+                    <select
+                      id="study-subject"
+                      aria-label="Subject"
+                      value={selectedSubjectNumber}
+                      disabled={timestamp !== null}
+                      onChange={event => {
+                        setSelectedSubjectNumber(event.target.value);
+                        setActionEvents([]);
+                        setSelectedEventTarget(null);
+                        setNestedParent(null);
+                      }}
+                    >
+                      {subjects.map(subject => (
+                        <option key={subject.id} value={subject.number}>Subject {subject.number}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
               <div className="observation-log-title">
-                <h2>Observation log</h2>
                 {selectedEventTarget && (
                   <span>
                     {pendingMergeTarget
@@ -569,47 +660,74 @@ export default function Study() {
                       : "Select a button to replace this action"}
                   </span>
                 )}
-              </div>
-              {!hasEmptyGridCell && (
                 <button
-                  className="observation-log-add"
+                  className="observation-log-toggle"
                   type="button"
-                  onClick={() => {
-                    setAddPosition(null);
-                    setNewElementName("");
-                    setIsAddingElement(true);
-                  }}
+                  aria-expanded={isObservationLogExpanded}
+                  aria-controls="study-observation-log"
+                  onClick={() => setIsObservationLogExpanded(expanded => !expanded)}
                 >
-                  &lt;Add&gt;
+                  <span className="observation-log-heading-label">Observation log</span>
+                  <span
+                    className="observation-log-toggle-icon"
+                    aria-hidden="true"
+                  >
+                    {isObservationLogExpanded ? "\\vvv/" : "/^^^\\"}
+                  </span>
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => navigate(`/Results?templateId=${encodeURIComponent(template.id)}&subjectNumber=${selectedSubjectNumber}`)}
-              >
-                Results
-              </button>
+                {timestamp !== null && (
+                  <span className="study-observation-timer" role="timer">
+                    <span>Study:</span>
+                    <strong>{formatStudyTime(clockNow - timestamp)}</strong>
+                  </span>
+                )}
+              </div>
             </div>
             {visibleEvents.length === 0 ? (
               <p className="observation-log-empty">Recorded actions appear here during capture.</p>
             ) : (
               <ol className="observation-log-list" ref={observationLogRef}>
-                {visibleEvents.map(({ event, sourceEvent, sessionStartTime, target }, index) => {
+                {visibleEvents.map(({ event, sourceEvent, sessionStartTime, target, studyNumber }, index) => {
                   const eventKey = `${event.timestamp}-${index}`;
+                  const isPlaceholderAction = event.type === "placeholder";
+                  const isStudyMarker = event.type === "gap";
                   const isSelectedForReplacement =
                     selectedEventTarget?.source === target?.source &&
                     selectedEventTarget?.sessionId === target?.sessionId &&
                     selectedEventTarget?.index === target?.index;
                   return (
-                    <li className="observation-log-entry" key={eventKey}>
-                      {event.type === "gap" ? (
-                        <span className="gap-in-data">Gap in data</span>
+                    <li
+                      className={`observation-log-entry${isPlaceholderAction ? " is-placeholder" : ""}${isStudyMarker ? " is-study-marker" : ""}`}
+                      key={eventKey}
+                    >
+                      {isStudyMarker ? (
+                        <>
+                          <span className="gap-in-data">Study {studyNumber ?? 1}</span>
+                          <button
+                            className={`study-note-button${event.note ? " has-note" : ""}`}
+                            type="button"
+                            aria-label="Edit study scope notes"
+                            title="Edit study scope notes"
+                            disabled={!target}
+                            onClick={() => setNoteEditor({
+                              target,
+                              count: 1,
+                              note: sourceEvent?.note || event.note || ""
+                            })}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 16.5h-8l-5.5 3v-3H5A1.5 1.5 0 0 1 3.5 15V6A1.5 1.5 0 0 1 5 4.5Z" />
+                              <path d="M7.5 8h9M7.5 11h6" />
+                            </svg>
+                          </button>
+                        </>
                       ) : (
                         <>
                           <button
                             className={`observation-action-name${isSelectedForReplacement ? " is-selected" : ""}`}
                             type="button"
                             aria-pressed={isSelectedForReplacement}
+                            disabled={isPlaceholderAction}
                             onClick={() => {
                               setPendingMergeTarget(null);
                               setSelectedEventTarget(isSelectedForReplacement ? null : target);
@@ -617,18 +735,12 @@ export default function Study() {
                           >
                             {getEventName(event)}
                           </button>
-                          <span className="observation-elapsed">
-                            {formatElapsedTime(event.timestamp - Number(sessionStartTime ?? event.timestamp))}
-                          </span>
-                          <time dateTime={new Date(event.timestamp).toISOString()}>
-                            {new Date(event.timestamp).toLocaleTimeString()}
-                          </time>
                           <button
                             className={`study-note-button${event.note ? " has-note" : ""}`}
                             type="button"
                             aria-label="Edit action count and note"
                             title="Edit action count and note"
-                            disabled={!target}
+                            disabled={!target && !isPlaceholderAction}
                             onClick={() => setNoteEditor({
                               target,
                               count: sourceEvent.count ?? 1,
@@ -636,9 +748,20 @@ export default function Study() {
                             })}
                           >
                             <svg viewBox="0 0 20 20" aria-hidden="true">
-                              <path d="M4 2.5h12v15H4zM7 6h6M7 9h6M7 12h4" />
+                              <path d="M4 3.5h12a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 16 14.5H9l-5 3v-3H4A1.5 1.5 0 0 1 2.5 13V5A1.5 1.5 0 0 1 4 3.5Z" />
+                              <path d="M6 7h8M6 10h5" />
                             </svg>
                           </button>
+                          <span className="observation-elapsed">
+                            {isPlaceholderAction
+                              ? formatElapsedTime(clockNow - Number(placeholderTimestamp ?? timestamp))
+                              : formatElapsedTime(event.timestamp - Number(sessionStartTime ?? event.timestamp))}
+                          </span>
+                          <time dateTime={new Date(event.timestamp).toISOString()}>
+                            {isPlaceholderAction
+                              ? `${visibleActionCount} ${visibleActionCount === 1 ? "action" : "actions"}`
+                              : new Date(event.timestamp).toLocaleTimeString()}
+                          </time>
                           </>
                         )}
                       </li>
@@ -752,6 +875,14 @@ export default function Study() {
                       <button
                         type="button"
                         onClick={() => {
+                          if (noteEditor.target?.source === "placeholder") {
+                            setPlaceholderActionFields({
+                              count: noteEditor.count,
+                              note: noteEditor.note
+                            });
+                            setNoteEditor(null);
+                            return;
+                          }
                           updateEventTarget(noteEditor.target, {
                             count: noteEditor.count,
                             note: noteEditor.note
