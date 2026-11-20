@@ -1261,20 +1261,10 @@ input {
   white-space: nowrap;
 }
 
-.study-count-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.observation-log-list li .observation-elapsed {
   color: #525a60;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.study-count-control input {
-  width: 52px;
-  min-width: 0;
-  min-height: 30px;
-  padding: 3px 5px;
-  font-size: 12px;
 }
 
 .study-note-button {
@@ -1430,9 +1420,47 @@ input {
   font-size: 17px;
 }
 
+.study-note-dialog-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.study-note-dialog-header button {
+  min-width: 64px;
+  min-height: 34px;
+}
+
+.study-note-dialog-header button:first-child {
+  justify-self: start;
+}
+
+.study-note-dialog-header button:last-child {
+  justify-self: end;
+  border-color: #0b5686;
+  background: #0b5686;
+  color: #fff;
+}
+
 .study-note-dialog label {
   color: #39464e;
   font-size: 13px;
+}
+
+.study-action-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.study-action-note-field {
+  align-items: start;
+}
+
+.study-action-note-field label {
+  padding-top: 6px;
 }
 
 .study-add-name {
@@ -1441,7 +1469,6 @@ input {
 }
 
 .study-note-input {
-  grid-column: 1 / -1;
   width: 100%;
   min-height: 120px;
   padding: 6px;

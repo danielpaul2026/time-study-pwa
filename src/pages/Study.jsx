@@ -30,7 +30,7 @@ function canMergeEntries(sourceEntry, destinationEntry) {
 
 function getEventName(event) {
   return event.elementPrime
-    ? `${event.elementPrime}${event.elementSub ? ` / ${event.elementSub}` : ""}`
+    ? `${event.elementPrime}${event.elementSub ? `: ${event.elementSub}` : ""}`
     : event.name;
 }
 
@@ -66,7 +66,7 @@ export default function Study() {
   useEffect(() => {
     if (timestamp === null) return undefined;
 
-    const intervalId = window.setInterval(() => setClockNow(Date.now()), 1000);
+    const intervalId = window.setInterval(() => setClockNow(Date.now()), 10);
     return () => window.clearInterval(intervalId);
   }, [timestamp]);
 
@@ -280,15 +280,22 @@ export default function Study() {
     setTimestamp(null);
   }
 
-  function formatClock(milliseconds) {
-    const totalSeconds = Math.floor(milliseconds / 1000);
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
+  function formatStudyTime(milliseconds) {
+    const totalCentiseconds = Math.max(0, Math.floor(milliseconds / 10));
+    const totalSeconds = Math.floor(totalCentiseconds / 100);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    const centiseconds = totalCentiseconds % 100;
+
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${String(centiseconds).padStart(2, "0")}`;
+  }
+
+  function formatElapsedTime(milliseconds) {
+    const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
 
-    return [ hours, minutes, seconds ]
-      .map(value => String(value).padStart(2, "0"))
-      .join(":");
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   function getObservationLogHeightBounds() {
@@ -374,6 +381,7 @@ export default function Study() {
     const sessionEvents = getVisibleStudyEvents(events).map(({ event, sourceEvent, index }) => ({
       event,
       sourceEvent,
+      sessionStartTime: session.startTime,
       target: { source: "saved", sessionId: session.id, index, eventId: sourceEvent.id }
     }));
     if (sessionIndex === 0 || events.some(event => event.type === "gap")) return sessionEvents;
@@ -386,6 +394,7 @@ export default function Study() {
   const currentEvents = getVisibleStudyEvents(actionEvents).map(({ event, sourceEvent, index }) => ({
     event,
     sourceEvent,
+    sessionStartTime: timestamp,
     target: { source: "current", index, eventId: sourceEvent.id }
   }));
   const visibleEvents = [ ...previousEvents, ...currentEvents ];
@@ -543,7 +552,7 @@ export default function Study() {
             {timestamp !== null && (
               <div className="study-readout" role="status">
                 <span>RECORDING</span>
-                <strong>{formatClock(clockNow - timestamp)}</strong>
+                <strong>{formatStudyTime(clockNow - timestamp)}</strong>
                 <span>{visibleActionCount} actions</span>
               </div>
             )}
@@ -582,7 +591,7 @@ export default function Study() {
               <p className="observation-log-empty">Recorded actions appear here during capture.</p>
             ) : (
               <ol className="observation-log-list" ref={observationLogRef}>
-                {visibleEvents.map(({ event, sourceEvent, target }, index) => {
+                {visibleEvents.map(({ event, sourceEvent, sessionStartTime, target }, index) => {
                   const eventKey = `${event.timestamp}-${index}`;
                   const isSelectedForReplacement =
                     selectedEventTarget?.source === target?.source &&
@@ -605,29 +614,21 @@ export default function Study() {
                           >
                             {getEventName(event)}
                           </button>
+                          <span className="observation-elapsed">
+                            {formatElapsedTime(event.timestamp - Number(sessionStartTime ?? event.timestamp))}
+                          </span>
                           <time dateTime={new Date(event.timestamp).toISOString()}>
                             {new Date(event.timestamp).toLocaleTimeString()}
                           </time>
-                          <label className="study-count-control">
-                            Count:
-                            <input
-                              type="number"
-                              min="0"
-                              step="any"
-                              value={event.count ?? 1}
-                              onChange={changeEvent => updateEventTarget(target, {
-                                count: changeEvent.target.value === "" ? "" : Number(changeEvent.target.value)
-                              })}
-                            />
-                          </label>
                           <button
                             className={`study-note-button${event.note ? " has-note" : ""}`}
                             type="button"
-                            aria-label={event.note ? "Edit note" : "Add note"}
-                            title={event.note ? "Edit note" : "Add note"}
+                            aria-label="Edit action count and note"
+                            title="Edit action count and note"
                             disabled={!target}
                             onClick={() => setNoteEditor({
                               target,
+                              count: sourceEvent.count ?? 1,
                               note: sourceEvent.note || ""
                             })}
                           >
@@ -740,31 +741,53 @@ export default function Study() {
                     aria-labelledby="study-note-title"
                     onClick={event => event.stopPropagation()}
                   >
-                    <h2 id="study-note-title">Action note</h2>
-                    <textarea
-                      className="study-note-input"
-                      autoFocus
-                      aria-label="Action note"
-                      value={noteEditor.note}
-                      onChange={event => setNoteEditor(current => ({
-                        ...current,
-                        note: event.target.value
-                      }))}
-                      placeholder="Add a note"
-                    />
-                    <div className="study-note-dialog-actions">
+                    <div className="study-note-dialog-header">
                       <button type="button" onClick={() => setNoteEditor(null)}>
                         Cancel
                       </button>
+                      <h2 id="study-note-title">Fields</h2>
                       <button
                         type="button"
                         onClick={() => {
-                          updateEventTarget(noteEditor.target, { note: noteEditor.note });
+                          updateEventTarget(noteEditor.target, {
+                            count: noteEditor.count,
+                            note: noteEditor.note
+                          });
                           setNoteEditor(null);
                         }}
                       >
                         OK
                       </button>
+                    </div>
+                    <div className="study-action-field">
+                      <label htmlFor="study-action-count">Count:</label>
+                      <input
+                        id="study-action-count"
+                        className="study-add-name"
+                        type="number"
+                        min="0"
+                        step="any"
+                        autoFocus
+                        value={noteEditor.count}
+                        onChange={event => setNoteEditor(current => ({
+                          ...current,
+                          count: event.target.value === "" ? "" : Number(event.target.value)
+                        }))}
+                      />
+                    </div>
+                    <div className="study-action-field study-action-note-field">
+                      <label htmlFor="study-action-note">Note:</label>
+                      <textarea
+                        className="study-note-input"
+                        id="study-action-note"
+                        aria-label="Action note"
+                        value={noteEditor.note}
+                        onChange={event => setNoteEditor(current => ({
+                          ...current,
+                          note: event.target.value
+                        }))}
+                        placeholder="Add a note"
+                      />
                     </div>
                   </section>
               </div>
